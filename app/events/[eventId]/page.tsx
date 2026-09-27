@@ -111,7 +111,7 @@ async function PublicEventView({ event, session }: { event: any, session: any })
                                     </div>
                                     {p.amount !== null && (
                                         <div className="font-bold text-green-700">
-                                            {p.amount} {p.currency}
+                                            {p.amount.toString()} {p.currency}
                                         </div>
                                     )}
                                 </li>

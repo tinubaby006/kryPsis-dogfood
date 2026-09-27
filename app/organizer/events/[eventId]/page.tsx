@@ -2,7 +2,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { AddTrackForm, AddQuestionForm } from "./OrganizerForms";
+import { AddTrackForm, AddQuestionForm, AddPrizeForm, TrackItem, QuestionItem, PrizeItem, EditEventDetailsForm } from "./OrganizerForms";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
     const session = await getSession();
@@ -38,15 +38,21 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded border shadow-sm">
                         <h2 className="text-xl font-bold mb-4">Event Details</h2>
-                        <p><strong>Visibility:</strong> {event.visibility}</p>
-                        <p><strong>Closes:</strong> {event.submissionsCloseAt ? new Date(event.submissionsCloseAt).toLocaleString() : 'N/A'}</p>
-                        <p><strong>Max Team Size:</strong> {event.maxTeamSize}</p>
+                        <EditEventDetailsForm 
+                            event={{
+                                id: event.id,
+                                name: event.name,
+                                visibility: event.visibility,
+                                maxTeamSize: event.maxTeamSize,
+                                submissionsCloseAt: event.submissionsCloseAt
+                            }} 
+                        />
                     </div>
 
                     <div className="bg-white p-6 rounded border shadow-sm">
                         <h2 className="text-xl font-bold mb-4">Tracks ({event.tracks.length})</h2>
-                        <ul className="list-disc pl-5">
-                            {event.tracks.map(t => <li key={t.id}>{t.name}</li>)}
+                        <ul className="list-none space-y-2 mb-4">
+                            {event.tracks.map(t => <TrackItem key={t.id} track={t} eventId={event.id} />)}
                         </ul>
                         <AddTrackForm eventId={event.id} />
                     </div>
@@ -60,9 +66,9 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                         ) : (
                             <p className="text-sm text-green-600 font-medium mb-2">No submissions yet. You may add or remove questions.</p>
                         )}
-                        <ul className="list-disc pl-5">
+                        <ul className="list-none space-y-2 mb-4">
                             {event.customQuestions.map(q => (
-                                <li key={q.id}>{q.label} <span className="text-xs text-gray-400">({q.type}) {q.required ? '*Required' : ''}</span></li>
+                                <QuestionItem key={q.id} question={q} eventId={event.id} disabled={submissionsExist} />
                             ))}
                         </ul>
                         <AddQuestionForm eventId={event.id} disabled={submissionsExist} />
@@ -70,12 +76,12 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
 
                     <div className="bg-white p-6 rounded border shadow-sm">
                         <h2 className="text-xl font-bold mb-4">Prizes ({event.prizes.length})</h2>
-                        <ul className="list-disc pl-5">
+                        <ul className="list-none space-y-2 mb-4">
                             {event.prizes.map(p => (
-                                <li key={p.id}>{p.name} {p.amount ? `- ${p.amount} ${p.currency}` : ''}</li>
+                                <PrizeItem key={p.id} prize={{...p, amount: p.amount ? p.amount.toString() : null}} eventId={event.id} />
                             ))}
                         </ul>
-                        <p className="text-sm text-gray-500 mt-2">API integration ready for edits.</p>
+                        <AddPrizeForm eventId={event.id} />
                     </div>
                 </div>
             </div>
