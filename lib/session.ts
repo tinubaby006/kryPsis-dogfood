@@ -1,8 +1,6 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/db";
 
 export async function getSession() {
   const session = await auth.api.getSession({

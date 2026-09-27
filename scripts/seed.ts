@@ -42,7 +42,8 @@ async function main() {
 
   // Pre-calculate standard dev password hash to avoid bcrypt overhead in loop
   console.log("Preparing users and authentication...");
-  const devPasswordHash = await bcrypt.hash('dogfood_local_dev', 10);
+  // Use Better Auth's expected hash format for 'dogfood_local_dev'
+  const devPasswordHash = "80511828d0b8ea8b45ce1b78f3337900:2b50f3cf8a51fe3b217a3e9d41b5bdac60939470d7220b3480fd0160c3181f56880eb98fc65c5ce470767d33a651426c97812259afe67b15da7de12cc89d3fbc";
   
   // Extract all distinct emails
   const emails = new Set<string>();
