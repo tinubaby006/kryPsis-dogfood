@@ -39,6 +39,7 @@ export function toPublicProjectDTO(project: ProjectWithRelations) {
     techTags: project.techTags,
     status: project.status,
     submittedAt: project.submittedAt,
+    duplicateOfId: project.duplicateOfId,
     track: project.track ? {
         id: project.track.id,
         name: project.track.name

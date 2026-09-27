@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { ProjectStatus, RecordSource, AssetKind } from "@prisma/client";
 
 export type ProjectPayload = {
@@ -189,6 +190,9 @@ export async function upsertProjectInternal(payload: ProjectPayload, userId: str
 
             return await tx.project.findUnique({ where: { id: pid } });
         });
+
+        revalidatePath(`/events/${eventId}/projects`);
+        revalidatePath(`/events/${eventId}/team`);
 
         return { success: true, project: result };
     } catch (e: any) {
