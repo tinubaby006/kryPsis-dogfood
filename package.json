@@ -6,7 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:studio": "prisma studio",
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "assessment:config": "tsx scripts/generate-assessment-config.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
