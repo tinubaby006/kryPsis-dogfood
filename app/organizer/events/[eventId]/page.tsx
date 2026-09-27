@@ -2,6 +2,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { AddTrackForm, AddQuestionForm } from "./OrganizerForms";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
     const session = await getSession();
@@ -47,7 +48,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                         <ul className="list-disc pl-5">
                             {event.tracks.map(t => <li key={t.id}>{t.name}</li>)}
                         </ul>
-                        <p className="text-sm text-gray-500 mt-2">API integration ready for edits.</p>
+                        <AddTrackForm eventId={event.id} />
                     </div>
                 </div>
 
@@ -64,7 +65,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                                 <li key={q.id}>{q.label} <span className="text-xs text-gray-400">({q.type}) {q.required ? '*Required' : ''}</span></li>
                             ))}
                         </ul>
-                        <p className="text-sm text-gray-500 mt-2">API integration ready for edits.</p>
+                        <AddQuestionForm eventId={event.id} disabled={submissionsExist} />
                     </div>
 
                     <div className="bg-white p-6 rounded border shadow-sm">
