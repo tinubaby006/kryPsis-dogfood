@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: dogfood
+      POSTGRES_PASSWORD: dogfood_local_dev
+      POSTGRES_DB: dogfood
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dogfood_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dogfood -d dogfood"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  dogfood_pgdata:
