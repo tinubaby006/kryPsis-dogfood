@@ -1,0 +1,3 @@
+[test]
+bearer = "df_ccb8b2c3467bd2749ded594483e8e44711108ecd553325eb982257ebd470523d"
+endpoint = "http://127.0.0.1:3000"

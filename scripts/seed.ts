@@ -1,14 +1,279 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("Database Seed placeholder for Stage 1. Will parse fixtures.json and upsert data.");
-  // Implementation deferred to when Docker validation is unblocked
+  const fixturesPath = path.join(process.cwd(), 'docs', 'official', 'fixtures.json');
+  const rawFixtures = fs.readFileSync(fixturesPath, 'utf8');
+  const fixturesHash = crypto.createHash('sha256').update(rawFixtures).digest('hex');
+  const data = JSON.parse(rawFixtures);
+
+  console.log("Checking import idempotency...");
+  const existingImport = await prisma.fixtureImport.findUnique({
+    where: { sourceName_sourceSha256: { sourceName: 'fixtures.json', sourceSha256: fixturesHash } }
+  });
+
+  if (existingImport) {
+    console.warn(`WARNING: Fixture fixtures.json with hash ${fixturesHash} has already been imported on ${existingImport.importedAt.toISOString()}. Proceeding with UPSERTs to ensure idempotency...`);
+  } else {
+    await prisma.fixtureImport.create({
+      data: {
+        sourceName: 'fixtures.json',
+        sourceSha256: fixturesHash,
+        counts: {
+            tracks: data.tracks.length,
+            judges: data.judges.length,
+            teams: data.teams.length,
+            projects: data.projects.length,
+            scores: data.scores.length
+        },
+        rawPayload: {}
+      }
+    });
+  }
+
+  // Pre-calculate standard dev password hash to avoid bcrypt overhead in loop
+  console.log("Preparing users and authentication...");
+  const devPasswordHash = await bcrypt.hash('dogfood_local_dev', 10);
+  
+  // Extract all distinct emails
+  const emails = new Set<string>();
+  emails.add("platform_admin@dogfood.local"); // Admin
+  data.judges.forEach((j: any) => emails.add(j.email));
+  data.teams.forEach((t: any) => {
+      t.members.forEach((m: string) => emails.add(m));
+  });
+
+  const usersMap = new Map<string, string>(); // email -> id
+
+  await prisma.$transaction(async (tx) => {
+      // 1. Upsert Users
+      for (const email of emails) {
+          const name = email.split('@')[0];
+          const isPlatformAdmin = email === "platform_admin@dogfood.local";
+          
+          let user = await tx.user.findUnique({ where: { email } });
+          if (!user) {
+              user = await tx.user.create({
+                  data: {
+                      name,
+                      email,
+                      emailVerified: true,
+                      isPlatformAdmin,
+                      canCreateEvents: isPlatformAdmin
+                  }
+              });
+              // Create Better Auth account credential manually to bypass API requirements in seed
+              await tx.account.create({
+                  data: {
+                      id: crypto.randomUUID(),
+                      accountId: user.id, // Better Auth stores user.id as accountId usually? Or just provider account ID. Actually accountId is usually the provider's ID (which is email for credentials)
+                      providerId: "credential",
+                      userId: user.id,
+                      password: devPasswordHash,
+                  }
+              });
+          }
+          usersMap.set(email, user.id);
+      }
+
+      // 2. Demo Event
+      console.log("Upserting Demo Event...");
+      const adminId = usersMap.get("platform_admin@dogfood.local")!;
+      await tx.event.upsert({
+          where: { slug: "demo" },
+          update: {},
+          create: {
+              slug: "demo",
+              name: "Hackathon Demo",
+              description: "Open demo event",
+              visibility: "PUBLIC",
+              submissionsCloseAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30), // 30 days
+              createdById: adminId
+          }
+      });
+
+      // 3. Fixture Event
+      console.log("Upserting Fixture Event...");
+      const fixtureEvent = data.event;
+      const eventRecord = await tx.event.upsert({
+          where: { slug: fixtureEvent.id },
+          update: {
+              name: fixtureEvent.name,
+              submissionsCloseAt: new Date(fixtureEvent.submissions_close),
+          },
+          create: {
+              id: fixtureEvent.id,
+              slug: fixtureEvent.id,
+              name: fixtureEvent.name,
+              submissionsCloseAt: new Date(fixtureEvent.submissions_close),
+              visibility: "DRAFT",
+              createdById: adminId,
+              fixtureSource: 'fixtures.json'
+          }
+      });
+      const eventId = eventRecord.id;
+
+      // 4. Tracks
+      for (let i = 0; i < data.tracks.length; i++) {
+          const track = data.tracks[i];
+          await tx.track.upsert({
+              where: { id_eventId: { id: track.id, eventId } },
+              update: { name: track.name, sortOrder: i },
+              create: { id: track.id, eventId, name: track.name, sortOrder: i }
+          });
+      }
+
+      // 5. Teams and Members
+      for (const team of data.teams) {
+          const creatorEmail = team.members[0]; // First member is owner
+          const creatorId = usersMap.get(creatorEmail)!;
+          
+          await tx.team.upsert({
+              where: { id_eventId: { id: team.id, eventId } },
+              update: { name: team.name },
+              create: { id: team.id, eventId, name: team.name, createdById: creatorId }
+          });
+
+          for (let i = 0; i < team.members.length; i++) {
+              const memberId = usersMap.get(team.members[i])!;
+              const role = i === 0 ? "OWNER" : "MEMBER";
+              await tx.teamMember.upsert({
+                  where: { teamId_userId: { teamId: team.id, userId: memberId } },
+                  update: { role },
+                  create: { eventId, teamId: team.id, userId: memberId, role }
+              });
+              
+              // Assign PARTICIPANT role
+              await tx.eventRole.upsert({
+                  where: { eventId_userId_role: { eventId, userId: memberId, role: "PARTICIPANT" } },
+                  update: {},
+                  create: { eventId, userId: memberId, role: "PARTICIPANT" }
+              });
+          }
+      }
+
+      // 6. Judges & Judge Tracks
+      for (const judge of data.judges) {
+          const judgeId = usersMap.get(judge.email)!;
+          
+          await tx.eventRole.upsert({
+              where: { eventId_userId_role: { eventId, userId: judgeId, role: "JUDGE" } },
+              update: {},
+              create: { eventId, userId: judgeId, role: "JUDGE" }
+          });
+
+          for (const trackId of judge.tracks) {
+              await tx.judgeTrack.upsert({
+                  where: { eventId_userId_trackId: { eventId, userId: judgeId, trackId } },
+                  update: {},
+                  create: { eventId, userId: judgeId, trackId }
+              });
+          }
+      }
+
+      // 7. Projects
+      for (const proj of data.projects) {
+          const submittedAt = proj.submitted_at ? new Date(proj.submitted_at) : null;
+          // Find if this project is a duplicate
+          const duplicateOf = data.projects.find((p: any) => p !== proj && p.team === proj.team && p.title === proj.title && p.id < proj.id);
+          
+          await tx.project.upsert({
+              where: { id_eventId: { id: proj.id, eventId } },
+              update: {
+                  title: proj.title,
+                  summary: proj.summary,
+                  repoUrl: proj.repo_url,
+                  status: submittedAt ? "SUBMITTED" : "DRAFT",
+                  submittedAt
+              },
+              create: {
+                  id: proj.id,
+                  eventId,
+                  teamId: proj.team,
+                  trackId: proj.track || null,
+                  title: proj.title,
+                  summary: proj.summary,
+                  repoUrl: proj.repo_url,
+                  status: submittedAt ? "SUBMITTED" : "DRAFT",
+                  submittedAt,
+                  duplicateOfId: duplicateOf ? duplicateOf.id : null,
+                  source: "FIXTURE"
+              }
+          });
+      }
+
+      // 8. Dynamic Criteria
+      // Since criteria definitions aren't explicitly listed, we extract them from the first score
+      if (data.scores.length > 0) {
+          const sampleScore = data.scores[0];
+          const criteriaKeys = Object.keys(sampleScore.criteria);
+          for (let i = 0; i < criteriaKeys.length; i++) {
+              const key = criteriaKeys[i];
+              await tx.criterion.upsert({
+                  where: { eventId_key: { eventId, key } },
+                  update: { sortOrder: i },
+                  create: { eventId, key, label: key.charAt(0).toUpperCase() + key.slice(1), sortOrder: i }
+              });
+          }
+      }
+
+      // 9. Reviews & Scores
+      // Create a map of criterion key to criterion id
+      const criteriaMap = new Map<string, string>();
+      const criteria = await tx.criterion.findMany({ where: { eventId } });
+      for (const c of criteria) criteriaMap.set(c.key, c.id);
+
+      // Map judge emails to users (scores have judge.id, but judge in fixtures has id = jdg_01 etc)
+      // Actually scores reference judge by judge ID!
+      const judgeIdToUserId = new Map<string, string>();
+      for (const j of data.judges) judgeIdToUserId.set(j.id, usersMap.get(j.email)!);
+
+      for (let i = 0; i < data.scores.length; i++) {
+          const score = data.scores[i];
+          const reviewId = `rev_${String(i + 1).padStart(3, '0')}`;
+          const judgeUserId = judgeIdToUserId.get(score.judge)!;
+          
+          await tx.review.upsert({
+              where: { eventId_judgeUserId_projectId: { eventId, judgeUserId, projectId: score.project } },
+              update: { comment: score.comment || "" },
+              create: {
+                  id: reviewId,
+                  eventId,
+                  judgeUserId,
+                  projectId: score.project,
+                  comment: score.comment || "",
+                  source: "FIXTURE"
+              }
+          });
+
+          // Re-fetch review to get exact ID in case of existing
+          const reviewRecord = await tx.review.findUnique({
+              where: { eventId_judgeUserId_projectId: { eventId, judgeUserId, projectId: score.project } }
+          });
+
+          const criteriaKeys = Object.keys(score.criteria);
+          for (const key of criteriaKeys) {
+              const criterionId = criteriaMap.get(key)!;
+              const value = score.criteria[key];
+              await tx.criterionScore.upsert({
+                  where: { reviewId_criterionId: { reviewId: reviewRecord!.id, criterionId } },
+                  update: { value },
+                  create: { eventId, reviewId: reviewRecord!.id, criterionId, value }
+              });
+          }
+      }
+  });
+
+  console.log("Database seeded successfully.");
 }
 
 main()
