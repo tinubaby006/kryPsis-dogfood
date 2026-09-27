@@ -1,13 +1,424 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+  isPlatformAdmin Boolean @default(false)
+  canCreateEvents Boolean @default(false)
+  
+  sessions      Session[]
+  accounts      Account[]
+  eventRoles    EventRole[]
+  assessmentCredentials AssessmentCredential[]
+  createdEvents Event[]
+  createdTeams  Team[]
+  teamMemberships TeamMember[]
+  createdInvites TeamInvite[]
+  judgedTracks  JudgeTrack[]
+  reviews       Review[]
+  uploadedAssets ProjectAsset[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz
+  token     String
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz
+  refreshTokenExpiresAt DateTime? @db.Timestamptz
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @db.Timestamptz
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+enum Role {
+  PARTICIPANT
+  JUDGE
+  ORGANIZER
+}
+
+model EventRole {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  role      Role
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, role])
+}
+
+model AssessmentCredential {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  label      String
+  expiresAt  DateTime  @db.Timestamptz
+  revokedAt  DateTime? @db.Timestamptz
+  createdAt  DateTime  @default(now()) @db.Timestamptz
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Visibility {
+  DRAFT
+  PUBLIC
+}
+
+model Event {
+  id                 String     @id @default(cuid())
+  slug               String     @unique
+  name               String
+  description        String     @default("")
+  startsAt           DateTime?  @db.Timestamptz
+  endsAt             DateTime?  @db.Timestamptz
+  submissionsOpenAt  DateTime?  @db.Timestamptz
+  submissionsCloseAt DateTime   @db.Timestamptz
+  visibility         Visibility @default(DRAFT)
+  maxTeamSize        Int        @default(4)
+  createdById        String
+  fixtureSource      String?
+  createdAt          DateTime   @default(now()) @db.Timestamptz
+  updatedAt          DateTime   @updatedAt @db.Timestamptz
+
+  creator         User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  eventRoles      EventRole[]
+  tracks          Track[]
+  prizes          Prize[]
+  customQuestions CustomQuestion[]
+  teams           Team[]
+  projects        Project[]
+  criteria        Criterion[]
+  reviews         Review[]
+}
+
+model Track {
+  id          String @id @default(cuid())
+  eventId     String
+  name        String
+  description String @default("")
+  sortOrder   Int
+
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  judgeTracks  JudgeTrack[]
+  projects     Project[]
+
+  @@unique([id, eventId])
+}
+
+model Prize {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String
+  amount      Decimal?
+  currency    String?
+  sortOrder   Int
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+}
+
+enum QuestionType {
+  TEXT
+  LONG_TEXT
+  URL
+  NUMBER
+  SELECT
+  BOOLEAN
+}
+
+model CustomQuestion {
+  id        String       @id @default(cuid())
+  eventId   String
+  key       String
+  label     String
+  type      QuestionType
+  required  Boolean      @default(false)
+  options   Json?
+  isPublic  Boolean      @default(false)
+  sortOrder Int
+
+  event   Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  answers CustomAnswer[]
+
+  @@unique([eventId, key])
+  @@unique([id, eventId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  createdById String
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  event   Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  creator User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  members TeamMember[]
+  invites TeamInvite[]
+  projects Project[]
+
+  @@unique([id, eventId])
+}
+
+enum TeamRole {
+  OWNER
+  MEMBER
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  eventId  String
+  teamId   String
+  userId   String
+  role     TeamRole
+  joinedAt DateTime @default(now()) @db.Timestamptz
+
+  team Team @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@unique([eventId, userId])
+}
+
+model TeamInvite {
+  id          String    @id @default(cuid())
+  eventId     String
+  teamId      String
+  tokenHash   String    @unique
+  createdById String
+  expiresAt   DateTime  @db.Timestamptz
+  revokedAt   DateTime? @db.Timestamptz
+  maxUses     Int
+  uses        Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  team    Team @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
+  creator User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+model JudgeTrack {
+  eventId String
+  userId  String
+  trackId String
+
+  track Track @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId, trackId])
+}
+
+enum ProjectStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum RecordSource {
+  LIVE
+  FIXTURE
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  eventId       String
+  teamId        String
+  trackId       String?
+  title         String        @default("")
+  summary       String        @default("")
+  description   String        @default("")
+  repoUrl       String?
+  liveUrl       String?
+  demoVideoUrl  String?
+  techTags      String[]      @default([])
+  status        ProjectStatus
+  submittedAt   DateTime?     @db.Timestamptz
+  version       Int           @default(1)
+  duplicateOfId String?
+  source        RecordSource
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @db.Timestamptz
+
+  event   Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  team    Team           @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
+  track   Track?         @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+  assets  ProjectAsset[]
+  answers CustomAnswer[]
+  reviews Review[]
+
+  @@unique([id, eventId])
+}
+
+enum AssetKind {
+  THUMBNAIL
+  GALLERY
+}
+
+model ProjectAsset {
+  id           String    @id @default(cuid())
+  eventId      String
+  projectId    String
+  kind         AssetKind
+  storageKey   String    @unique
+  originalName String
+  mimeType     String
+  bytes        Int
+  sortOrder    Int
+  createdById  String
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+
+  project Project @relation(fields: [projectId, eventId], references: [id, eventId], onDelete: Cascade)
+  creator User    @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+model CustomAnswer {
+  projectId  String
+  questionId String
+  eventId    String
+  value      Json
+
+  project  Project        @relation(fields: [projectId, eventId], references: [id, eventId], onDelete: Cascade)
+  question CustomQuestion @relation(fields: [questionId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@id([projectId, questionId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  eventId     String?
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json
+  createdAt   DateTime @default(now()) @db.Timestamptz
+}
+
+model Criterion {
+  id        String   @id @default(cuid())
+  eventId   String
+  key       String
+  label     String
+  weight    Decimal?
+  minScore  Decimal?
+  maxScore  Decimal?
+  sortOrder Int
+
+  event  Event            @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  scores CriterionScore[]
+
+  @@unique([eventId, key])
+  @@unique([id, eventId])
+}
+
+model Review {
+  id          String       @id @default(cuid())
+  eventId     String
+  judgeUserId String
+  projectId   String
+  comment     String       @default("")
+  source      RecordSource
+  createdAt   DateTime     @default(now()) @db.Timestamptz
+  updatedAt   DateTime     @updatedAt @db.Timestamptz
+
+  event   Event            @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  project Project          @relation(fields: [projectId, eventId], references: [id, eventId], onDelete: Cascade)
+  judge   User             @relation(fields: [judgeUserId], references: [id], onDelete: Restrict)
+  scores  CriterionScore[]
+
+  @@unique([eventId, judgeUserId, projectId])
+  @@unique([id, eventId])
+}
+
+model CriterionScore {
+  reviewId    String
+  criterionId String
+  eventId     String
+  value       Decimal
+
+  review    Review    @relation(fields: [reviewId, eventId], references: [id, eventId], onDelete: Cascade)
+  criterion Criterion @relation(fields: [criterionId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@id([reviewId, criterionId])
+}
+
+model FixtureImport {
+  id             String        @id @default(cuid())
+  sourceName     String
+  sourceSha256   String
+  importedAt     DateTime      @default(now()) @db.Timestamptz
+  counts         Json
+  rawPayload     Json
+  issues         ImportIssue[]
+
+  @@unique([sourceName, sourceSha256])
+}
+
+model ImportIssue {
+  id         String        @id @default(cuid())
+  importId   String
+  severity   String
+  code       String
+  entityType String
+  entityId   String?
+  details    Json
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+
+  import     FixtureImport @relation(fields: [importId], references: [id], onDelete: Cascade)
 }
