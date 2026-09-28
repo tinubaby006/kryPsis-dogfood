@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { AddTrackForm, AddQuestionForm, AddPrizeForm, TrackItem, QuestionItem, PrizeItem, EditEventDetailsForm } from "./OrganizerForms";
+import { JudgesSection } from "./JudgesSection";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
     const session = await getSession();
@@ -57,6 +58,8 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                         </ul>
                         <AddTrackForm eventId={event.id} />
                     </div>
+
+                    <JudgesSection eventId={event.id} tracks={event.tracks} />
                 </div>
 
                 <div className="space-y-6">

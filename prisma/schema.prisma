@@ -34,6 +34,10 @@ model User {
   organizerRequests OrganizerAccessRequest[]
   reviewedRequests  OrganizerAccessRequest[] @relation("ReviewerAdmin")
 
+  judgeAccesses         EventJudgeAccess[] @relation("JudgeUser")
+  invitedJudgeAccesses  EventJudgeAccess[] @relation("InvitedByAdmin")
+  confirmedJudgeAccesses EventJudgeAccess[] @relation("ConfirmedByAdmin")
+
   @@unique([email])
   @@map("user")
 }
@@ -149,6 +153,7 @@ model Event {
   projects        Project[]
   criteria        Criterion[]
   reviews         Review[]
+  judgeAccesses   EventJudgeAccess[]
 }
 
 model Track {
@@ -161,6 +166,7 @@ model Track {
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   judgeTracks  JudgeTrack[]
   projects     Project[]
+  judgeAccessTracks EventJudgeAccessTrack[]
 
   @@unique([id, eventId])
 }
@@ -453,4 +459,52 @@ model OrganizerAccessRequest {
 
   @@index([status, createdAt])
   @@index([applicantUserId, createdAt])
+}
+
+enum EventJudgeAccessStatus {
+  INVITED
+  AWAITING_CONFIRMATION
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model EventJudgeAccess {
+  id              String                 @id @default(cuid())
+  eventId         String
+  emailNormalized String
+  userId          String?
+  status          EventJudgeAccessStatus
+  tokenHash       String?                @unique
+  invitedById     String
+  confirmedById   String?
+  expiresAt       DateTime?              @db.Timestamptz
+  acceptedAt      DateTime?              @db.Timestamptz
+  confirmedAt     DateTime?              @db.Timestamptz
+  revokedAt       DateTime?              @db.Timestamptz
+  createdAt       DateTime               @default(now()) @db.Timestamptz
+  updatedAt       DateTime               @updatedAt @db.Timestamptz
+  version         Int                    @default(1)
+
+  event           Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user            User?                  @relation("JudgeUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy       User                   @relation("InvitedByAdmin", fields: [invitedById], references: [id])
+  confirmedBy     User?                  @relation("ConfirmedByAdmin", fields: [confirmedById], references: [id])
+  
+  tracks          EventJudgeAccessTrack[]
+
+  @@unique([eventId, emailNormalized])
+  @@unique([id, eventId])
+  @@index([eventId, status])
+}
+
+model EventJudgeAccessTrack {
+  accessId String
+  eventId  String
+  trackId  String
+
+  access   EventJudgeAccess @relation(fields: [accessId, eventId], references: [id, eventId], onDelete: Cascade)
+  track    Track            @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Cascade)
+
+  @@id([accessId, trackId])
 }
