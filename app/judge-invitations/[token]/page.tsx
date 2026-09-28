@@ -40,20 +40,20 @@ export default function JudgeInvitationAcceptPage({ params }: { params: Promise<
     };
 
     return (
-        <div className="max-w-md mx-auto py-20 px-4">
-            <div className="bg-white p-8 rounded-xl border shadow-sm text-center">
-                <h1 className="text-2xl font-bold mb-4">Accept Judge Invitation</h1>
-                <p className="text-gray-600 mb-6 text-sm">
+        <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-4">
+            <div className="bg-card p-10 rounded-xl border border-border shadow-sm text-center max-w-md w-full">
+                <h1 className="text-2xl font-bold mb-4 font-heading text-foreground">Accept Judge Invitation</h1>
+                <p className="text-muted-foreground mb-8 text-sm">
                     You have been invited to judge an event on our platform. 
                     If you don't have an account with the invited email, you will need to sign up first.
                 </p>
 
                 {error && (
-                    <div className="bg-red-50 text-red-700 p-3 rounded mb-6 text-sm font-medium border border-red-200 text-left">
+                    <div className="bg-destructive/10 text-destructive-text p-4 rounded-md mb-8 text-sm font-medium border border-destructive/20 text-left">
                         {error}
                         {error.includes("403") && (
-                            <div className="mt-2">
-                                <Link href={`/sign-in?callbackUrl=/judge-invitations/${token}`} className="underline">Switch Account</Link>
+                            <div className="mt-3">
+                                <Link href={`/sign-in?callbackUrl=/judge-invitations/${token}`} className="underline hover:text-destructive-text/80 transition-colors">Switch Account</Link>
                             </div>
                         )}
                     </div>
@@ -62,7 +62,7 @@ export default function JudgeInvitationAcceptPage({ params }: { params: Promise<
                 <button 
                     onClick={handleAccept}
                     disabled={loading}
-                    className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="w-full bg-primary text-primary-foreground font-semibold py-3.5 rounded-lg hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-sm"
                 >
                     {loading ? "Processing..." : "Accept Invitation"}
                 </button>

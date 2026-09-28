@@ -27,21 +27,21 @@ export function CreateTeamForm({ eventId }: { eventId: string }) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="mt-4 p-4 border rounded bg-gray-50 max-w-sm">
-            <h3 className="font-semibold mb-2">Create a Team</h3>
-            {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-            <div className="flex gap-2">
+        <form onSubmit={handleSubmit} className="mt-4 p-5 border border-border rounded-xl bg-background shadow-sm">
+            <h3 className="font-semibold mb-3 text-foreground font-heading">Create a Team</h3>
+            {error && <div className="text-destructive-text text-sm mb-3 font-medium bg-destructive/10 p-2 rounded">{error}</div>}
+            <div className="flex flex-col gap-3">
                 <input 
                     required 
                     type="text" 
                     name="name" 
                     placeholder="Team Name" 
-                    className="border p-2 rounded flex-1"
+                    className="w-full border border-border bg-card text-foreground p-2.5 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
                 />
                 <button 
                     type="submit" 
                     disabled={loading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="w-full bg-primary text-primary-foreground px-5 py-2.5 rounded-md hover:bg-primary-hover disabled:opacity-50 transition-colors font-medium text-sm"
                 >
                     {loading ? "Creating..." : "Create"}
                 </button>

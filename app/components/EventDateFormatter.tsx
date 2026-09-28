@@ -54,8 +54,8 @@ export function EventDateFormatter({
         // Server-side rendering or initial hydration
         return (
             <div className={className}>
-                {showStatus && <span className="font-semibold text-gray-500">Loading status...</span>}
-                {showAbsolute && <div className="text-sm text-gray-600">{formattedDate} ({timeZone})</div>}
+                {showStatus && <span className="font-semibold text-muted-foreground">Loading status...</span>}
+                {showAbsolute && <div className="text-sm text-muted-foreground">{formattedDate} ({timeZone})</div>}
             </div>
         );
     }
@@ -71,18 +71,18 @@ export function EventDateFormatter({
             openFormatted = submissionsOpenAt.toLocaleString();
         }
         statusLabel = `Opens ${openFormatted}`;
-        statusClass = "text-blue-700 bg-blue-100";
+        statusClass = "text-warning bg-warning/10 border border-warning/20";
     } else if (now < submissionsCloseAt) {
         statusLabel = `Submissions open; closes ${formattedDate}`;
-        statusClass = "text-green-700 bg-green-100";
+        statusClass = "text-success bg-success/10 border border-success/20";
     } else {
         statusLabel = `Submissions closed ${formattedDate}`;
-        statusClass = "text-red-700 bg-red-100";
+        statusClass = "text-destructive-text bg-destructive/10 border border-destructive/20";
     }
 
     if (!submissionsCloseAt) {
         statusLabel = "Schedule unavailable";
-        statusClass = "text-red-700 bg-red-100";
+        statusClass = "text-destructive-text bg-destructive/10 border border-destructive/20";
     }
 
     return (
@@ -93,7 +93,7 @@ export function EventDateFormatter({
                 </span>
             )}
             {showAbsolute && (
-                <div className="text-sm text-gray-600 mt-1">
+                <div className="text-sm text-muted-foreground mt-2">
                     Deadline: {formattedDate}
                 </div>
             )}

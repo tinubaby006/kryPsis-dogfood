@@ -37,38 +37,38 @@ export default function SignUpPage() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center p-4">
-            <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded border shadow">
-                <h1 className="text-2xl font-bold mb-6 text-center">Sign Up</h1>
-                {error && <div className="bg-red-50 text-red-800 p-3 rounded mb-4 text-sm">{error}</div>}
+        <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-4">
+            <form onSubmit={handleSubmit} className="w-full max-w-sm bg-card p-8 rounded-xl border border-border shadow-sm">
+                <h1 className="text-2xl font-bold mb-6 text-center font-heading text-foreground">Sign Up</h1>
+                {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-3 rounded-md mb-4 text-sm font-medium">{error}</div>}
                 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <label className="block text-sm font-medium mb-1.5 text-foreground">Name</label>
                         <input 
                             type="text" 
                             required 
-                            className="w-full border p-2 rounded" 
+                            className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" 
                             value={name}
                             onChange={e => setName(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Email</label>
+                        <label className="block text-sm font-medium mb-1.5 text-foreground">Email</label>
                         <input 
                             type="email" 
                             required 
-                            className="w-full border p-2 rounded" 
+                            className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" 
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Password</label>
+                        <label className="block text-sm font-medium mb-1.5 text-foreground">Password</label>
                         <input 
                             type="password" 
                             required 
-                            className="w-full border p-2 rounded" 
+                            className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" 
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                         />
@@ -78,13 +78,13 @@ export default function SignUpPage() {
                 <button 
                     type="submit" 
                     disabled={loading}
-                    className="w-full bg-blue-600 text-white p-2 rounded mt-6 font-medium disabled:opacity-50"
+                    className="w-full bg-primary text-primary-foreground p-2.5 rounded-md mt-6 font-medium disabled:opacity-50 hover:bg-primary-hover transition-colors shadow-sm"
                 >
                     {loading ? "Signing up..." : "Sign Up"}
                 </button>
 
-                <p className="mt-4 text-center text-sm text-gray-600">
-                    Already have an account? <Link href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-blue-600 hover:underline">Sign in</Link>
+                <p className="mt-6 text-center text-sm text-muted-foreground">
+                    Already have an account? <Link href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-primary hover:text-primary-hover font-medium">Sign in</Link>
                 </p>
             </form>
         </div>

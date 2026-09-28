@@ -96,95 +96,113 @@ export default function ProjectEditorClient({ event, team, initialProject }: any
         }
     };
 
+    const inputClasses = "w-full border border-border bg-background text-foreground p-2.5 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground";
+    const labelClasses = "block text-sm font-medium mb-1.5 text-foreground";
+    const sectionClasses = "bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm";
+    const sectionTitleClasses = "text-xl font-bold font-heading mb-6 border-b border-border pb-3 flex items-center gap-2 text-foreground";
+
     return (
-        <div className="bg-white p-6 border rounded shadow-sm">
-            {error && <div className="bg-red-50 text-red-700 p-3 mb-4 rounded">{error}</div>}
-            {isClosed && <div className="bg-yellow-50 text-yellow-800 p-3 mb-4 rounded font-bold">Submissions are currently closed.</div>}
+        <div className="space-y-8">
+            {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 rounded-md font-medium text-sm">{error}</div>}
+            {isClosed && <div className="bg-warning/10 border border-warning/20 text-warning p-4 rounded-md font-medium text-sm">Submissions are currently closed.</div>}
 
-            <div className="space-y-4">
-                <div>
-                    <label className="block font-medium mb-1">Project Title</label>
-                    <input type="text" className="w-full border p-2 rounded" value={title} onChange={e => setTitle(e.target.value)} />
-                </div>
-                <div>
-                    <label className="block font-medium mb-1">Summary (Short)</label>
-                    <input type="text" className="w-full border p-2 rounded" value={summary} onChange={e => setSummary(e.target.value)} />
-                </div>
-                <div>
-                    <label className="block font-medium mb-1">Detailed Description</label>
-                    <textarea className="w-full border p-2 rounded h-32" value={description} onChange={e => setDescription(e.target.value)} />
-                </div>
-                <div>
-                    <label className="block font-medium mb-1">Track</label>
-                    <select className="w-full border p-2 rounded" value={trackId} onChange={e => setTrackId(e.target.value)}>
-                        <option value="">-- No Track --</option>
-                        {event.tracks.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+            <div className={sectionClasses}>
+                <h2 className={sectionTitleClasses}>1. Basics</h2>
+                <div className="space-y-5">
                     <div>
-                        <label className="block font-medium mb-1">Repository URL</label>
-                        <input type="url" className="w-full border p-2 rounded" value={repoUrl} onChange={e => setRepoUrl(e.target.value)} />
+                        <label className={labelClasses}>Project Title <span className="text-primary">*</span></label>
+                        <input type="text" className={inputClasses} value={title} onChange={e => setTitle(e.target.value)} />
                     </div>
                     <div>
-                        <label className="block font-medium mb-1">Live URL</label>
-                        <input type="url" className="w-full border p-2 rounded" value={liveUrl} onChange={e => setLiveUrl(e.target.value)} />
+                        <label className={labelClasses}>Summary (Short)</label>
+                        <input type="text" className={inputClasses} value={summary} onChange={e => setSummary(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className={labelClasses}>Track</label>
+                        <select className={inputClasses} value={trackId} onChange={e => setTrackId(e.target.value)}>
+                            <option value="">-- No Track --</option>
+                            {event.tracks.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
                     </div>
                 </div>
-                <div>
-                    <label className="block font-medium mb-1">Tech Tags (comma separated)</label>
-                    <input type="text" className="w-full border p-2 rounded" value={techTags} onChange={e => setTechTags(e.target.value)} />
-                </div>
+            </div>
 
-                <div className="border-t pt-4 mt-4">
-                    <h3 className="font-bold text-lg mb-2">Media & Assets</h3>
-                    <div className="mb-4">
-                        <label className="block font-medium mb-1">Thumbnail (JPEG, PNG, WebP &lt; 5MB)</label>
-                        <input type="file" accept="image/jpeg, image/png, image/webp" onChange={e => handleFileUpload(e, "THUMBNAIL")} />
+            <div className={sectionClasses}>
+                <h2 className={sectionTitleClasses}>2. Details & Links</h2>
+                <div className="space-y-5">
+                    <div>
+                        <label className={labelClasses}>Detailed Description</label>
+                        <textarea className={`${inputClasses} h-40 resize-y`} value={description} onChange={e => setDescription(e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                            <label className={labelClasses}>Repository URL</label>
+                            <input type="url" className={inputClasses} value={repoUrl} onChange={e => setRepoUrl(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className={labelClasses}>Live URL</label>
+                            <input type="url" className={inputClasses} value={liveUrl} onChange={e => setLiveUrl(e.target.value)} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className={labelClasses}>Tech Tags (comma separated)</label>
+                        <input type="text" className={inputClasses} value={techTags} onChange={e => setTechTags(e.target.value)} />
+                    </div>
+                </div>
+            </div>
+
+            <div className={sectionClasses}>
+                <h2 className={sectionTitleClasses}>3. Media & Assets</h2>
+                <div className="space-y-5">
+                    <div>
+                        <label className={labelClasses}>Thumbnail (JPEG, PNG, WebP &lt; 5MB)</label>
+                        <input type="file" className="text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" accept="image/jpeg, image/png, image/webp" onChange={e => handleFileUpload(e, "THUMBNAIL")} />
                     </div>
                     {assets.length > 0 && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-4 mt-4">
                             {assets.map(a => (
-                                <div key={a.storageKey} className="relative w-24 h-24 border">
-                                    <img src={`/api/assets/${a.storageKey}`} className="w-full h-full object-cover" />
+                                <div key={a.storageKey} className="relative w-32 h-32 border border-border rounded-lg overflow-hidden shadow-sm">
+                                    <img src={`/api/assets/${a.storageKey}`} className="w-full h-full object-cover" alt="Asset" />
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
+            </div>
 
-                {event.customQuestions.length > 0 && (
-                    <div className="border-t pt-4 mt-4">
-                        <h3 className="font-bold text-lg mb-2">Custom Questions</h3>
+            {event.customQuestions.length > 0 && (
+                <div className={sectionClasses}>
+                    <h2 className={sectionTitleClasses}>4. Custom Questions</h2>
+                    <div className="space-y-5">
                         {event.customQuestions.map((q: any) => (
-                            <div key={q.id} className="mb-3">
-                                <label className="block font-medium mb-1">{q.label} {q.required && <span className="text-red-500">*</span>}</label>
+                            <div key={q.id}>
+                                <label className={labelClasses}>{q.label} {q.required && <span className="text-primary">*</span>}</label>
                                 <input 
                                     type="text" 
-                                    className="w-full border p-2 rounded"
+                                    className={inputClasses}
                                     value={answers[q.id] || ""}
                                     onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
                                 />
                             </div>
                         ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
-            <div className="flex justify-end space-x-4 mt-6 pt-4 border-t">
+            <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
                 <button 
                     disabled={loading}
                     onClick={() => handleSave("DRAFT")}
-                    className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+                    className="px-6 py-3 bg-muted border border-border text-foreground font-medium text-sm rounded-md hover:bg-muted-foreground/20 disabled:opacity-50 transition-colors"
                 >
                     Save as Draft
                 </button>
                 <button 
                     disabled={loading || isClosed}
                     onClick={() => handleSave("SUBMITTED")}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="px-6 py-3 bg-primary text-primary-foreground font-medium text-sm rounded-md hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-sm"
                 >
-                    Submit Project
+                    Submit Final Project
                 </button>
             </div>
         </div>

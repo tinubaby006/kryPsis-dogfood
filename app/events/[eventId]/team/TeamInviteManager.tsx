@@ -38,56 +38,56 @@ export function TeamInviteManager({ teamId, eventId, activeInvites }: { teamId: 
     }
 
     return (
-        <div className="mt-8 border-t pt-8">
-            <h2 className="text-xl font-bold mb-4">Manage Invitations</h2>
+        <div className="mt-8 border-t border-border pt-8">
+            <h2 className="text-xl font-bold mb-6 font-heading text-foreground">Manage Invitations</h2>
             
             {newToken && (
-                <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded mb-6">
-                    <p className="font-semibold mb-2">Invitation Created!</p>
-                    <p className="text-sm mb-2">Copy this link and share it securely with your teammate. It will only be shown once.</p>
-                    <div className="bg-white border p-2 rounded font-mono text-sm break-all select-all">
+                <div className="bg-success/10 border border-success/20 text-success-text p-5 rounded-lg mb-8 shadow-sm">
+                    <p className="font-bold mb-2 flex items-center gap-2 text-success">Invitation Created!</p>
+                    <p className="text-sm mb-4">Copy this link and share it securely with your teammate. It will only be shown once.</p>
+                    <div className="bg-background border border-border p-3 rounded-md font-mono text-sm break-all select-all text-foreground">
                         {`${window.location.origin}/invite/${newToken}`}
                     </div>
                 </div>
             )}
 
-            {error && <div className="text-red-600 mb-4">{error}</div>}
+            {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 rounded-md mb-6 text-sm font-medium">{error}</div>}
 
-            <form onSubmit={handleGenerate} className="bg-gray-50 p-4 border rounded mb-6 max-w-lg">
-                <h3 className="font-semibold mb-3">Create New Invite Link</h3>
-                <div className="flex gap-4 mb-4">
+            <form onSubmit={handleGenerate} className="bg-card p-6 md:p-8 border border-border rounded-xl mb-10 shadow-sm max-w-xl">
+                <h3 className="font-bold mb-6 font-heading text-foreground border-b border-border pb-3">Create New Invite Link</h3>
+                <div className="flex flex-col sm:flex-row gap-5 mb-6">
                     <div className="flex-1">
-                        <label className="block text-sm mb-1">Max Uses</label>
-                        <input type="number" name="maxUses" min="1" max="10" defaultValue="1" className="w-full border p-2 rounded" />
+                        <label className="block text-sm font-medium mb-1.5 text-foreground">Max Uses</label>
+                        <input type="number" name="maxUses" min="1" max="10" defaultValue="1" className="w-full bg-background border border-border text-foreground p-2.5 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
                     </div>
                     <div className="flex-1">
-                        <label className="block text-sm mb-1">Expires In (Hours)</label>
-                        <select name="expireHours" className="w-full border p-2 rounded">
+                        <label className="block text-sm font-medium mb-1.5 text-foreground">Expires In (Hours)</label>
+                        <select name="expireHours" className="w-full bg-background border border-border text-foreground p-2.5 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                             <option value="24">24 Hours</option>
                             <option value="48">48 Hours</option>
                             <option value="168">7 Days</option>
                         </select>
                     </div>
                 </div>
-                <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
+                <button type="submit" disabled={loading} className="w-full bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:bg-primary-hover disabled:opacity-50 transition-colors font-medium text-sm shadow-sm">
                     {loading ? "Generating..." : "Generate Link"}
                 </button>
             </form>
 
-            <h3 className="font-semibold mb-3">Active Invitations</h3>
+            <h3 className="font-bold mb-4 font-heading text-foreground">Active Invitations</h3>
             {activeInvites.length === 0 ? (
-                <p className="text-gray-500 text-sm">No active invitations.</p>
+                <p className="text-muted-foreground text-sm p-4 bg-muted/30 border border-border rounded-lg text-center">No active invitations.</p>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-w-xl">
                     {activeInvites.map(inv => (
-                        <div key={inv.id} className="border p-4 rounded flex justify-between items-center bg-white shadow-sm">
+                        <div key={inv.id} className="border border-border p-4 rounded-lg flex justify-between items-center bg-card shadow-sm hover:border-primary/30 transition-colors">
                             <div>
-                                <p className="text-sm font-medium">Uses: {inv.uses} / {inv.maxUses}</p>
-                                <p className="text-xs text-gray-500">Expires: {new Date(inv.expiresAt).toLocaleString()}</p>
+                                <p className="text-sm font-semibold text-foreground mb-1">Uses: {inv.uses} / {inv.maxUses}</p>
+                                <p className="text-xs text-muted-foreground font-medium">Expires: {new Date(inv.expiresAt).toLocaleString()}</p>
                             </div>
                             <button 
                                 onClick={() => handleRevoke(inv.id)}
-                                className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                className="text-destructive-text hover:underline text-sm font-medium px-3 py-1.5 rounded-md hover:bg-destructive/10 transition-colors"
                             >
                                 Revoke
                             </button>

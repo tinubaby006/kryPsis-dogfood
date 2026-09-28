@@ -100,29 +100,29 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
     };
 
     return (
-        <div className="bg-white p-6 rounded border shadow-sm mt-6">
-            <h2 className="text-xl font-bold mb-4">Judges</h2>
+        <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm mt-8">
+            <h2 className="text-xl font-bold mb-6 font-heading border-b border-border pb-3 text-foreground">Judges</h2>
             
-            {error && <div className="bg-red-50 text-red-700 p-3 rounded text-sm mb-4">{error}</div>}
+            {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 rounded-md text-sm mb-6 font-medium">{error}</div>}
 
-            <form onSubmit={handleGrant} className="mb-6 bg-gray-50 p-4 rounded border">
-                <h3 className="font-semibold mb-2 text-sm">Provision Judge Access</h3>
-                <div className="space-y-3">
+            <form onSubmit={handleGrant} className="mb-8 bg-muted/30 p-6 rounded-lg border border-border">
+                <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Provision Judge Access</h3>
+                <div className="space-y-4">
                     <div>
                         <input 
                             type="email" 
                             required 
-                            className="w-full p-2 border rounded" 
+                            className="w-full p-2.5 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" 
                             placeholder="Judge email address"
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                         />
                     </div>
                     <div>
-                        <p className="text-xs text-gray-600 mb-1">Select tracks for this judge (required):</p>
-                        <div className="flex flex-wrap gap-2">
+                        <p className="text-sm font-medium text-foreground mb-2">Select tracks for this judge (required):</p>
+                        <div className="flex flex-wrap gap-2.5">
                             {tracks.map(t => (
-                                <label key={t.id} className="inline-flex items-center text-sm bg-white border px-2 py-1 rounded cursor-pointer">
+                                <label key={t.id} className="inline-flex items-center text-sm bg-background border border-border px-3 py-1.5 rounded-md cursor-pointer hover:border-primary/50 transition-colors text-foreground">
                                     <input 
                                         type="checkbox" 
                                         className="mr-2"
@@ -137,55 +137,57 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
                             ))}
                         </div>
                     </div>
-                    <button 
-                        type="submit" 
-                        disabled={submitting || selectedTracks.length === 0}
-                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                    >
-                        {submitting ? "Processing..." : "Grant / Create Invite"}
-                    </button>
+                    <div className="pt-2">
+                        <button 
+                            type="submit" 
+                            disabled={submitting || selectedTracks.length === 0}
+                            className="bg-primary text-primary-foreground px-5 py-2.5 rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-sm"
+                        >
+                            {submitting ? "Processing..." : "Grant / Create Invite"}
+                        </button>
+                    </div>
                 </div>
             </form>
 
             {loading ? (
-                <div className="text-sm text-gray-500">Loading judges...</div>
+                <div className="text-sm text-muted-foreground p-4 text-center">Loading judges...</div>
             ) : accesses.length === 0 ? (
-                <div className="text-sm text-gray-500">No judges provisioned yet.</div>
+                <div className="text-sm text-muted-foreground p-6 text-center border border-dashed border-border rounded-lg">No judges provisioned yet.</div>
             ) : (
                 <ul className="space-y-3">
                     {accesses.map(a => (
-                        <li key={a.id} className="border rounded p-3 text-sm flex justify-between items-start">
+                        <li key={a.id} className="border border-border bg-background rounded-lg p-4 text-sm flex justify-between items-start shadow-sm">
                             <div>
-                                <div className="font-semibold">{a.user?.name || a.emailNormalized}</div>
-                                <div className="text-gray-500 text-xs mb-1">{a.emailNormalized}</div>
-                                <div className="flex flex-wrap gap-1 mb-2">
+                                <div className="font-semibold text-foreground">{a.user?.name || a.emailNormalized}</div>
+                                <div className="text-muted-foreground text-xs mb-2">{a.emailNormalized}</div>
+                                <div className="flex flex-wrap gap-1.5 mb-3">
                                     {a.tracks.map((t: any) => (
-                                        <span key={t.id} className="bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0.5 rounded">
+                                        <span key={t.id} className="bg-muted text-muted-foreground border border-border text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded">
                                             {t.name}
                                         </span>
                                     ))}
                                 </div>
-                                <div className={`text-xs font-semibold px-2 py-0.5 rounded inline-block ${
-                                    a.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                                    a.status === 'INVITED' ? 'bg-yellow-100 text-yellow-800' :
-                                    a.status === 'AWAITING_CONFIRMATION' ? 'bg-purple-100 text-purple-800' :
-                                    a.status === 'EXPIRED' ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-800'
+                                <div className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border inline-block ${
+                                    a.status === 'ACTIVE' ? 'bg-success/10 text-success border-success/20' :
+                                    a.status === 'INVITED' ? 'bg-warning/10 text-warning border-warning/20' :
+                                    a.status === 'AWAITING_CONFIRMATION' ? 'bg-primary/10 text-primary border-primary/20' :
+                                    a.status === 'EXPIRED' ? 'bg-muted text-muted-foreground border-border' : 'bg-destructive/10 text-destructive-text border-destructive/20'
                                 }`}>
                                     {a.status}
                                 </div>
                                 {a.status === 'INVITED' && a.expiresAt && (
-                                    <div className="text-xs text-gray-500 mt-1">Expires: {new Date(a.expiresAt).toLocaleDateString()}</div>
+                                    <div className="text-xs font-medium text-muted-foreground mt-2">Expires: {new Date(a.expiresAt).toLocaleDateString()}</div>
                                 )}
                             </div>
                             <div className="flex flex-col gap-2 text-right">
                                 {a.status === 'AWAITING_CONFIRMATION' && (
-                                    <button onClick={() => handleConfirm(a.id)} className="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700">Confirm Account</button>
+                                    <button onClick={() => handleConfirm(a.id)} className="text-xs bg-success text-success-foreground px-3 py-1.5 rounded-md hover:bg-success/90 font-medium transition-colors shadow-sm">Confirm Account</button>
                                 )}
                                 {(a.status === 'INVITED' || a.status === 'EXPIRED') && (
-                                    <button onClick={() => handleRenew(a.id)} className="text-xs text-blue-600 hover:underline">Renew Invite</button>
+                                    <button onClick={() => handleRenew(a.id)} className="text-xs text-primary font-medium hover:underline">Renew Invite</button>
                                 )}
                                 {a.status !== 'REVOKED' && (
-                                    <button onClick={() => handleRevoke(a.id)} className="text-xs text-red-600 hover:underline">Revoke</button>
+                                    <button onClick={() => handleRevoke(a.id)} className="text-xs text-destructive-text font-medium hover:underline">Revoke</button>
                                 )}
                             </div>
                         </li>

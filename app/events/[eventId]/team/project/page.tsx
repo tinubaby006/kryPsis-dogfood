@@ -23,7 +23,7 @@ export default async function TeamProjectPage({ params }: { params: Promise<{ ev
 
     if (!membership) {
         return (
-            <div className="p-8 text-center text-red-600">
+            <div className="p-8 text-center text-destructive-text font-medium bg-destructive/10 border border-destructive/20 rounded-md m-6">
                 You must join or create a team for this event before you can submit a project.
             </div>
         );
@@ -36,8 +36,8 @@ export default async function TeamProjectPage({ params }: { params: Promise<{ ev
     });
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
-            <h1 className="text-3xl font-bold mb-6">Submit Your Project</h1>
+        <div className="max-w-5xl mx-auto p-4 md:p-8">
+            <h1 className="text-3xl md:text-4xl font-bold mb-8 font-heading text-foreground">Submit Your Project</h1>
             <ProjectEditorClient 
                 event={event} 
                 team={membership.team} 

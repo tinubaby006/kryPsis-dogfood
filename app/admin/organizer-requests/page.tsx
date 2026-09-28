@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, ShieldCheck, UserCheck, Search, XCircle, CheckCircle } from "lucide-react";
 
 type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "REVOKED";
 
@@ -96,123 +97,140 @@ export default function AdminOrganizerRequestsPage() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto py-10 px-4">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Organizer Requests</h1>
-                <Link href="/admin" className="text-blue-600 hover:underline">Back to Admin</Link>
+        <div className="max-w-7xl mx-auto py-8">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
+                <h1 className="text-3xl font-bold font-heading flex items-center gap-2 text-foreground">
+                    <UserCheck className="w-8 h-8 text-primary" /> Organizer Requests
+                </h1>
+                <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2 border border-border rounded-md hover:bg-muted flex items-center gap-2">
+                    <ArrowLeft className="w-4 h-4" /> Back to Admin
+                </Link>
             </div>
 
-            {error && <div className="bg-red-50 text-red-700 p-4 mb-4 rounded">{error}</div>}
+            {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 mb-6 rounded-md font-medium text-sm">{error}</div>}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-2">
-                    <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
                         {loading ? (
-                            <div className="p-8 text-center text-gray-500">Loading queue...</div>
+                            <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                                <Search className="w-8 h-8 mb-4 opacity-20" />
+                                <p>Loading queue...</p>
+                            </div>
                         ) : requests.length === 0 ? (
-                            <div className="p-8 text-center text-gray-500">No requests found.</div>
+                            <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                                <ShieldCheck className="w-12 h-12 mb-4 text-muted-foreground/30" />
+                                <p>No requests found.</p>
+                            </div>
                         ) : (
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-50 border-b">
-                                    <tr>
-                                        <th className="p-4 font-semibold">Applicant</th>
-                                        <th className="p-4 font-semibold">Event</th>
-                                        <th className="p-4 font-semibold">Status</th>
-                                        <th className="p-4 font-semibold">Submitted</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {requests.map(req => (
-                                        <tr 
-                                            key={req.id} 
-                                            onClick={() => setSelectedReq(req)}
-                                            className={`border-b cursor-pointer hover:bg-gray-50 ${selectedReq?.id === req.id ? 'bg-blue-50' : ''}`}
-                                        >
-                                            <td className="p-4">
-                                                <div className="font-medium text-gray-900">{req.applicant.name}</div>
-                                                <div className="text-gray-500">{req.applicant.email}</div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="font-medium text-gray-900 line-clamp-1">{req.proposedEventName}</div>
-                                                <div className="text-gray-500 line-clamp-1">{req.organizationName || '-'}</div>
-                                            </td>
-                                            <td className="p-4">
-                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                    req.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                                    req.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
-                                                    req.status === 'REJECTED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {req.status}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-gray-500">
-                                                {new Date(req.createdAt).toLocaleDateString()}
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-muted/50 border-b border-border">
+                                        <tr>
+                                            <th className="p-4 font-semibold text-muted-foreground">Applicant</th>
+                                            <th className="p-4 font-semibold text-muted-foreground">Event</th>
+                                            <th className="p-4 font-semibold text-muted-foreground">Status</th>
+                                            <th className="p-4 font-semibold text-muted-foreground">Submitted</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {requests.map(req => (
+                                            <tr 
+                                                key={req.id} 
+                                                onClick={() => setSelectedReq(req)}
+                                                className={`cursor-pointer transition-colors ${selectedReq?.id === req.id ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-muted/30 border-l-2 border-l-transparent'}`}
+                                            >
+                                                <td className="p-4">
+                                                    <div className="font-semibold text-foreground">{req.applicant.name}</div>
+                                                    <div className="text-muted-foreground text-xs mt-0.5">{req.applicant.email}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="font-semibold text-foreground line-clamp-1">{req.proposedEventName}</div>
+                                                    <div className="text-muted-foreground text-xs line-clamp-1 mt-0.5">{req.organizationName || '-'}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
+                                                        req.status === 'PENDING' ? 'bg-warning/10 text-warning border-warning/20' :
+                                                        req.status === 'APPROVED' ? 'bg-success/10 text-success border-success/20' :
+                                                        req.status === 'REJECTED' ? 'bg-destructive/10 text-destructive-text border-destructive/20' : 'bg-muted text-muted-foreground border-border'
+                                                    }`}>
+                                                        {req.status}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-muted-foreground text-xs font-medium">
+                                                    {new Date(req.createdAt).toLocaleDateString()}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                <div className="md:col-span-1">
+                <div className="lg:col-span-1">
                     {selectedReq ? (
-                        <div className="bg-white border rounded-lg shadow-sm p-6 sticky top-6">
-                            <h2 className="text-xl font-bold mb-4">Request Details</h2>
+                        <div className="bg-card border border-border rounded-xl shadow-sm p-6 lg:sticky lg:top-6">
+                            <h2 className="text-xl font-bold mb-6 font-heading border-b border-border pb-3 flex items-center justify-between">
+                                Request Details
+                                <button onClick={() => setSelectedReq(null)} className="text-muted-foreground hover:text-foreground">
+                                    <XCircle className="w-5 h-5" />
+                                </button>
+                            </h2>
                             
-                            <div className="space-y-4 mb-6">
+                            <div className="space-y-5 mb-8">
                                 <div>
-                                    <h3 className="text-sm font-semibold text-gray-500">Applicant</h3>
-                                    <p className="font-medium">{selectedReq.applicant.name}</p>
-                                    <p className="text-sm text-gray-600">{selectedReq.applicant.email}</p>
-                                    <p className="text-xs mt-1">
-                                        Current Permission: <span className={selectedReq.applicant.canCreateEvents ? 'text-green-600 font-semibold' : 'text-gray-500'}>{selectedReq.applicant.canCreateEvents ? 'Yes' : 'No'}</span>
+                                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Applicant</h3>
+                                    <p className="font-semibold text-foreground">{selectedReq.applicant.name}</p>
+                                    <p className="text-sm text-muted-foreground">{selectedReq.applicant.email}</p>
+                                    <p className="text-xs mt-2 font-medium">
+                                        Current Permission: <span className={selectedReq.applicant.canCreateEvents ? 'text-success font-bold bg-success/10 px-1.5 py-0.5 rounded ml-1' : 'text-muted-foreground'}>{selectedReq.applicant.canCreateEvents ? 'Yes' : 'No'}</span>
                                     </p>
                                     {selectedReq.applicant.canCreateEvents && (
-                                        <button onClick={() => handleRevoke(selectedReq.applicantUserId)} className="text-xs text-red-600 hover:underline mt-1">
+                                        <button onClick={() => handleRevoke(selectedReq.applicantUserId)} className="text-xs text-destructive-text hover:underline mt-2 font-medium">
                                             Revoke Capability
                                         </button>
                                     )}
                                 </div>
                                 
                                 <div>
-                                    <h3 className="text-sm font-semibold text-gray-500">Proposed Event</h3>
-                                    <p className="font-medium">{selectedReq.proposedEventName}</p>
+                                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Proposed Event</h3>
+                                    <p className="font-semibold text-foreground">{selectedReq.proposedEventName}</p>
                                 </div>
 
                                 {selectedReq.organizationName && (
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-500">Organization</h3>
-                                        <p className="font-medium">{selectedReq.organizationName}</p>
+                                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Organization</h3>
+                                        <p className="font-semibold text-foreground">{selectedReq.organizationName}</p>
                                     </div>
                                 )}
 
                                 {selectedReq.websiteUrl && (
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-500">Website</h3>
-                                        <a href={selectedReq.websiteUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm break-all">{selectedReq.websiteUrl}</a>
+                                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Website</h3>
+                                        <a href={selectedReq.websiteUrl} target="_blank" rel="noreferrer" className="text-primary hover:text-primary-hover text-sm break-all font-medium">{selectedReq.websiteUrl}</a>
                                     </div>
                                 )}
 
                                 <div>
-                                    <h3 className="text-sm font-semibold text-gray-500">Reason</h3>
-                                    <p className="text-sm bg-gray-50 p-3 rounded border whitespace-pre-wrap max-h-60 overflow-y-auto">{selectedReq.reason}</p>
+                                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Reason</h3>
+                                    <p className="text-sm bg-muted/50 p-4 rounded-md border border-border whitespace-pre-wrap text-foreground/90 max-h-60 overflow-y-auto leading-relaxed">{selectedReq.reason}</p>
                                 </div>
 
                                 {selectedReq.status !== "PENDING" && selectedReq.decisionReason && (
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-500">Decision Reason</h3>
-                                        <p className="text-sm bg-gray-50 p-3 rounded border text-gray-700 whitespace-pre-wrap">{selectedReq.decisionReason}</p>
+                                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Decision Reason</h3>
+                                        <p className="text-sm bg-muted p-4 rounded-md border border-border text-foreground/90 whitespace-pre-wrap leading-relaxed">{selectedReq.decisionReason}</p>
                                     </div>
                                 )}
                             </div>
 
                             {selectedReq.status === "PENDING" && (
-                                <div className="border-t pt-4">
-                                    <label className="block text-sm font-semibold mb-2">Decision Reason (Required for Rejection)</label>
+                                <div className="border-t border-border pt-6 mt-6">
+                                    <label className="block text-sm font-semibold mb-2 text-foreground">Decision Reason (Required for Rejection)</label>
                                     <textarea 
-                                        className="w-full border rounded p-2 text-sm mb-4" 
+                                        className="w-full bg-background border border-border text-foreground rounded-md p-3 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" 
                                         rows={3} 
                                         placeholder="Add a reason or note..."
                                         value={reason}
@@ -222,24 +240,27 @@ export default function AdminOrganizerRequestsPage() {
                                         <button 
                                             disabled={actionLoading}
                                             onClick={() => handleDecision("REJECT")}
-                                            className="flex-1 bg-white border border-red-200 text-red-700 py-2 rounded font-medium hover:bg-red-50 disabled:opacity-50"
+                                            className="flex-1 bg-background border border-destructive/50 text-destructive-text py-2.5 rounded-md font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                                         >
-                                            Reject
+                                            <XCircle className="w-4 h-4" /> Reject
                                         </button>
                                         <button 
                                             disabled={actionLoading}
                                             onClick={() => handleDecision("APPROVE")}
-                                            className="flex-1 bg-green-600 text-white py-2 rounded font-medium hover:bg-green-700 disabled:opacity-50"
+                                            className="flex-1 bg-success text-success-foreground py-2.5 rounded-md font-medium hover:bg-success/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
                                         >
-                                            Approve
+                                            <CheckCircle className="w-4 h-4" /> Approve
                                         </button>
                                     </div>
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <div className="bg-gray-50 border rounded-lg border-dashed flex items-center justify-center h-64 text-gray-500">
-                            Select a request to view details
+                        <div className="bg-card border border-border border-dashed rounded-xl flex items-center justify-center h-64 text-muted-foreground">
+                            <div className="text-center">
+                                <Search className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                                <p>Select a request to view details</p>
+                            </div>
                         </div>
                     )}
                 </div>

@@ -33,7 +33,7 @@ export default async function Home() {
   }));
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col items-center pb-20">
+    <main className="min-h-screen bg-background flex flex-col items-center pb-20">
       <HomeClient events={serializedEvents as any} session={session} />
     </main>
   );

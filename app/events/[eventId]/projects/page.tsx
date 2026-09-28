@@ -81,8 +81,8 @@ export default async function PublicProjectsGallery({
     return (
         <div className="max-w-7xl mx-auto p-4 sm:p-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                <h1 className="text-3xl font-bold text-gray-900">{event.name} - Project Gallery</h1>
-                <Link href={`/events/${eventId}`} className="text-blue-600 hover:underline font-medium">
+                <h1 className="text-3xl font-bold text-foreground font-heading">{event.name} - Project Gallery</h1>
+                <Link href={`/events/${eventId}`} className="text-primary hover:text-primary-hover font-medium flex items-center gap-2">
                     &larr; Back to Event
                 </Link>
             </div>

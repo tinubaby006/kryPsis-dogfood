@@ -31,24 +31,24 @@ export default async function InvitePreviewPage({ params }: { params: Promise<{ 
                   teamFull ? "This team is already at maximum capacity." : null;
 
     return (
-        <div className="container mx-auto py-20 px-4 max-w-2xl">
-            <div className="bg-white p-10 rounded-xl shadow border text-center">
-                <h1 className="text-3xl font-bold mb-2">Team Invitation</h1>
+        <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-4">
+            <div className="bg-card p-10 rounded-xl border border-border shadow-sm text-center max-w-2xl w-full">
+                <h1 className="text-3xl font-bold mb-4 font-heading text-foreground">Team Invitation</h1>
                 
                 {error ? (
-                    <div className="mt-8 p-6 bg-red-50 text-red-800 rounded-lg border border-red-200">
-                        <p className="font-semibold text-lg">{error}</p>
+                    <div className="mt-8 p-6 bg-destructive/10 text-destructive-text rounded-lg border border-destructive/20 text-sm font-medium">
+                        <p>{error}</p>
                     </div>
                 ) : (
                     <>
-                        <p className="text-gray-600 mb-8">
-                            You have been invited to join the team <span className="font-bold text-black">{invite.team.name}</span> for the event <span className="font-bold text-black">{invite.team.event.name}</span>.
+                        <p className="text-muted-foreground mb-10 text-lg">
+                            You have been invited to join the team <span className="font-bold text-foreground">{invite.team.name}</span> for the event <span className="font-bold text-foreground">{invite.team.event.name}</span>.
                         </p>
                         
                         {!session?.user ? (
-                            <div className="p-6 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
-                                <p className="mb-4 font-medium">You must be logged in to accept this invitation.</p>
-                                <Link href={`/sign-in?callbackUrl=/invite/${token}`} className="bg-yellow-600 text-white px-6 py-2 rounded font-medium hover:bg-yellow-700">
+                            <div className="p-8 bg-warning/10 text-warning-foreground rounded-lg border border-warning/20">
+                                <p className="mb-6 font-medium text-warning text-lg">You must be logged in to accept this invitation.</p>
+                                <Link href={`/sign-in?callbackUrl=/invite/${token}`} className="bg-warning text-warning-foreground px-6 py-3 rounded-md font-medium hover:bg-warning/90 transition-colors shadow-sm inline-block">
                                     Sign In or Create Account
                                 </Link>
                             </div>

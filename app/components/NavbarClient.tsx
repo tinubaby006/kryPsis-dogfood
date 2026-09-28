@@ -24,6 +24,10 @@ export default function NavbarClient({
     let displayRole = "";
     let showOrganizerLink = false;
 
+    if (pathname?.startsWith("/admin") || pathname?.startsWith("/organizer") || pathname?.startsWith("/dashboard")) {
+        return null;
+    }
+
     if (isAdmin) {
         displayRole = "Admin";
         showOrganizerLink = true;
@@ -43,33 +47,33 @@ export default function NavbarClient({
     };
 
     return (
-        <header className="bg-white shadow-sm border-b">
+        <header className="bg-background border-b border-border">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16 items-center">
                     <div className="flex items-center space-x-6">
-                        <Link href="/" className="font-bold text-xl tracking-tight text-blue-600">DogfoodHack</Link>
+                        <Link href="/" className="font-bold text-xl tracking-tight text-primary">DogfoodHack</Link>
                         
                         {/* Desktop Nav */}
                         <nav className="hidden md:flex space-x-4">
-                            {isAdmin && <Link href="/admin" className="text-gray-600 hover:text-gray-900 font-medium">Admin</Link>}
-                            {showOrganizerLink && <Link href="/organizer" className="text-gray-600 hover:text-gray-900 font-medium">Organizer</Link>}
+                            {isAdmin && <Link href="/admin" className="text-muted-foreground hover:text-foreground font-medium transition-colors">Admin</Link>}
+                            {showOrganizerLink && <Link href="/organizer" className="text-muted-foreground hover:text-foreground font-medium transition-colors">Organizer</Link>}
                         </nav>
                     </div>
                     
                     <div className="flex items-center space-x-4">
                         {user ? (
                             <div className="hidden md:flex items-center space-x-4">
-                                {displayRole && <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold uppercase">{displayRole}</span>}
-                                <span className="text-sm font-medium text-gray-700">{user.email}</span>
-                                <button onClick={handleSignOut} className="text-sm text-red-600 hover:text-red-800 font-medium">Sign Out</button>
+                                {displayRole && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded font-bold uppercase">{displayRole}</span>}
+                                <Link href="/dashboard" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Dashboard</Link>
+                                <button onClick={handleSignOut} className="text-sm text-destructive-text hover:text-destructive transition-colors font-medium">Sign Out</button>
                             </div>
                         ) : (
-                            <Link href="/sign-in" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700">Sign In</Link>
+                            <Link href="/sign-in" className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary-hover transition-colors">Sign In</Link>
                         )}
                         
                         {/* Mobile menu button */}
                         <div className="md:hidden">
-                            <button onClick={() => setMenuOpen(!menuOpen)} className="text-gray-500 hover:text-gray-900 p-2">
+                            <button onClick={() => setMenuOpen(!menuOpen)} className="text-muted-foreground hover:text-foreground p-2">
                                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={menuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
                                 </svg>
@@ -81,20 +85,21 @@ export default function NavbarClient({
 
             {/* Mobile Nav */}
             {menuOpen && (
-                <div className="md:hidden border-t">
+                <div className="md:hidden border-t border-border bg-card">
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                        {isAdmin && <Link href="/admin" className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Admin</Link>}
-                        {showOrganizerLink && <Link href="/organizer" className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Organizer</Link>}
+                        {isAdmin && <Link href="/admin" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Admin</Link>}
+                        {showOrganizerLink && <Link href="/organizer" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Organizer</Link>}
                         {user ? (
                             <>
-                                <div className="px-3 py-2 text-sm text-gray-500">
-                                    {displayRole && <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold uppercase mr-2">{displayRole}</span>}
+                                <div className="px-3 py-2 text-sm text-muted-foreground">
+                                    {displayRole && <span className="inline-block bg-primary/20 text-primary text-xs px-2 py-1 rounded font-bold uppercase mr-2">{displayRole}</span>}
                                     {user.email}
                                 </div>
-                                <button onClick={handleSignOut} className="block w-full text-left px-3 py-2 text-base font-medium text-red-600 hover:text-red-800 hover:bg-gray-50">Sign Out</button>
+                                <Link href="/dashboard" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Dashboard</Link>
+                                <button onClick={handleSignOut} className="block w-full text-left px-3 py-2 text-base font-medium text-destructive-text hover:bg-muted rounded-md">Sign Out</button>
                             </>
                         ) : (
-                            <Link href="/sign-in" className="block px-3 py-2 text-base font-medium text-blue-600 hover:bg-gray-50">Sign In</Link>
+                            <Link href="/sign-in" className="block px-3 py-2 text-base font-medium text-primary hover:bg-muted rounded-md">Sign In</Link>
                         )}
                     </div>
                 </div>

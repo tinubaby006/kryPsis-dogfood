@@ -40,16 +40,16 @@ export default function ProjectGalleryClient({
     return (
         <div>
             {/* Filters */}
-            <div className="bg-white p-4 rounded border shadow-sm mb-6 flex flex-col md:flex-row gap-4">
+            <div className="bg-card p-4 rounded-xl border border-border shadow-sm mb-6 flex flex-col md:flex-row gap-4">
                 <input 
                     type="text" 
                     placeholder="Search projects..." 
-                    className="border p-2 rounded flex-1"
+                    className="border border-border bg-background text-foreground p-2 rounded-md flex-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
                     value={q}
                     onChange={e => setQ(e.target.value)}
                 />
                 <select 
-                    className="border p-2 rounded"
+                    className="border border-border bg-background text-foreground p-2 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                     value={trackId}
                     onChange={e => setTrackId(e.target.value)}
                 >
@@ -59,7 +59,7 @@ export default function ProjectGalleryClient({
                 <input 
                     type="text" 
                     placeholder="Filter by tech tag..." 
-                    className="border p-2 rounded"
+                    className="border border-border bg-background text-foreground p-2 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
                     value={tag}
                     onChange={e => setTag(e.target.value)}
                 />
@@ -67,77 +67,82 @@ export default function ProjectGalleryClient({
 
             {/* Gallery Grid */}
             {projects.length === 0 ? (
-                <div className="text-center p-12 bg-gray-50 border rounded-lg">
-                    <p className="text-gray-500">No projects match your criteria.</p>
+                <div className="text-center p-12 bg-muted/30 border border-border rounded-xl">
+                    <p className="text-muted-foreground">No projects match your criteria.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {projects.map((p: any) => (
-                        <div key={p.id} className="border rounded-lg overflow-hidden shadow-sm flex flex-col bg-white">
-                            <Link href={`/events/${eventId}/projects/${p.id}`} className="block relative">
-                                {p.assets?.find((a: any) => a.kind === "THUMBNAIL") ? (
-                                    <img 
-                                        src={`/api/assets/${p.assets.find((a: any) => a.kind === "THUMBNAIL").storageKey}`} 
-                                        alt={p.title} 
-                                        className="w-full h-48 object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-48 bg-gray-200 flex items-center justify-center text-gray-400">
-                                        No Thumbnail
-                                    </div>
-                                )}
-                                {isOrganizer && p.duplicateOfId && (
-                                    <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded font-bold shadow">
-                                        Duplicate
-                                    </div>
-                                )}
-                            </Link>
-                            
-                            <div className="p-4 flex-1 flex flex-col">
-                                <h3 className="text-xl font-bold mb-1">
-                                    <Link href={`/events/${eventId}/projects/${p.id}`} className="hover:text-blue-600">
-                                        {p.title}
-                                    </Link>
-                                </h3>
-                                <p className="text-sm text-gray-500 mb-2">by {p.team.name}</p>
+                    {projects.map((p: any) => {
+                        const firstLetter = p.title ? p.title.charAt(0).toUpperCase() : "?";
+                        return (
+                            <div key={p.id} className="border border-border rounded-xl overflow-hidden shadow-sm flex flex-col bg-card hover:border-primary/50 transition-colors group">
+                                <Link href={`/events/${eventId}/projects/${p.id}`} className="block relative aspect-[3/2] overflow-hidden">
+                                    {p.assets?.find((a: any) => a.kind === "THUMBNAIL") ? (
+                                        <img 
+                                            src={`/api/assets/${p.assets.find((a: any) => a.kind === "THUMBNAIL").storageKey}`} 
+                                            alt={p.title} 
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-muted flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+                                            <div className="w-16 h-16 rounded-full bg-background flex items-center justify-center shadow-inner">
+                                                <span className="text-2xl font-bold font-heading text-muted-foreground">{firstLetter}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {isOrganizer && p.duplicateOfId && (
+                                        <div className="absolute top-2 right-2 bg-destructive text-destructive-text text-xs px-2 py-1 rounded font-bold shadow">
+                                            Duplicate
+                                        </div>
+                                    )}
+                                </Link>
                                 
-                                <div className="flex flex-wrap gap-1 mb-3">
-                                    {p.track && <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">{p.track.name}</span>}
-                                    {p.techTags?.slice(0, 3).map((t: string) => (
-                                        <span key={t} className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{t}</span>
-                                    ))}
+                                <div className="p-5 flex-1 flex flex-col">
+                                    <h3 className="text-xl font-bold mb-1 font-heading">
+                                        <Link href={`/events/${eventId}/projects/${p.id}`} className="text-foreground group-hover:text-primary transition-colors">
+                                            {p.title}
+                                        </Link>
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mb-3">by {p.team.name}</p>
+                                    
+                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                        {p.track && <span className="bg-primary/20 text-primary text-xs font-semibold px-2 py-1 rounded">{p.track.name}</span>}
+                                        {p.techTags?.slice(0, 3).map((t: string) => (
+                                            <span key={t} className="bg-muted text-muted-foreground text-xs px-2 py-1 rounded border border-border">{t}</span>
+                                        ))}
+                                    </div>
+                                    
+                                    <p className="text-foreground/80 text-sm mb-4 flex-1 line-clamp-3 leading-relaxed">{p.summary}</p>
+                                    
+                                    {isOrganizer && p.duplicateOfId && (
+                                        <div className="mt-2 text-xs bg-destructive/10 text-destructive-text p-2 rounded-md border border-destructive/20">
+                                            <strong>Diagnostic:</strong> Marked as duplicate of {p.duplicateOfId}
+                                        </div>
+                                    )}
                                 </div>
-                                
-                                <p className="text-gray-700 text-sm mb-4 flex-1 line-clamp-3">{p.summary}</p>
-                                
-                                {isOrganizer && p.duplicateOfId && (
-                                    <div className="mt-2 text-xs bg-red-50 text-red-800 p-2 rounded border border-red-200">
-                                        <strong>Diagnostic:</strong> Marked as duplicate of {p.duplicateOfId}
-                                    </div>
-                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             {/* Pagination */}
             {totalPages > 1 && (
-                <div className="flex justify-center items-center space-x-2 mt-8">
+                <div className="flex justify-center items-center space-x-3 mt-10">
                     <button 
                         disabled={currentPage <= 1}
                         onClick={() => handlePageChange(currentPage - 1)}
-                        className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50"
+                        className="px-4 py-2 bg-card border border-border rounded-md text-foreground hover:bg-muted disabled:opacity-50 transition-colors text-sm font-medium shadow-sm"
                     >
                         Previous
                     </button>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm font-medium text-muted-foreground bg-muted px-3 py-1.5 rounded-md border border-border">
                         Page {currentPage} of {totalPages}
                     </span>
                     <button 
                         disabled={currentPage >= totalPages}
                         onClick={() => handlePageChange(currentPage + 1)}
-                        className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50"
+                        className="px-4 py-2 bg-card border border-border rounded-md text-foreground hover:bg-muted disabled:opacity-50 transition-colors text-sm font-medium shadow-sm"
                     >
                         Next
                     </button>

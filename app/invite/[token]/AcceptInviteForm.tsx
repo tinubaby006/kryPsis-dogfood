@@ -32,12 +32,12 @@ export function AcceptInviteForm({ token }: { token: string }) {
     }
 
     return (
-        <form onSubmit={handleAccept} className="mt-6 text-center">
-            {error && <div className="text-red-600 mb-4 font-medium">{error}</div>}
+        <form onSubmit={handleAccept} className="mt-8 text-center">
+            {error && <div className="text-destructive-text mb-6 font-medium bg-destructive/10 p-4 rounded-md border border-destructive/20">{error}</div>}
             <button 
                 type="submit" 
                 disabled={loading}
-                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 disabled:opacity-50"
+                className="w-full sm:w-auto bg-primary text-primary-foreground px-8 py-3.5 rounded-lg font-bold text-lg hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-sm"
             >
                 {loading ? "Joining..." : "Accept Invitation & Join Team"}
             </button>
