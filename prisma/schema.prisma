@@ -31,6 +31,8 @@ model User {
   judgedTracks  JudgeTrack[]
   reviews       Review[]
   uploadedAssets ProjectAsset[]
+  organizerRequests OrganizerAccessRequest[]
+  reviewedRequests  OrganizerAccessRequest[] @relation("ReviewerAdmin")
 
   @@unique([email])
   @@map("user")
@@ -422,4 +424,33 @@ model ImportIssue {
   createdAt  DateTime      @default(now()) @db.Timestamptz
 
   import     FixtureImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+}
+
+enum OrganizerAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  REVOKED
+}
+
+model OrganizerAccessRequest {
+  id                String                @id @default(cuid())
+  applicantUserId   String
+  applicant         User                  @relation(fields: [applicantUserId], references: [id], onDelete: Cascade)
+  organizationName  String?
+  proposedEventName String
+  reason            String                @db.Text
+  websiteUrl        String?
+  status            OrganizerAccessStatus @default(PENDING)
+  reviewedById      String?
+  reviewedBy        User?                 @relation("ReviewerAdmin", fields: [reviewedById], references: [id])
+  reviewedAt        DateTime?             @db.Timestamptz
+  decisionReason    String?               @db.Text
+  createdAt         DateTime              @default(now()) @db.Timestamptz
+  updatedAt         DateTime              @updatedAt @db.Timestamptz
+  version           Int                   @default(1)
+
+  @@index([status, createdAt])
+  @@index([applicantUserId, createdAt])
 }
