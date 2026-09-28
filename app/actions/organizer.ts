@@ -103,7 +103,7 @@ export async function deletePrize(eventId: string, prizeId: string) {
     return { success: true };
 }
 
-export async function updateEventDetails(eventId: string, data: { name: string, visibility: "DRAFT" | "PUBLIC", maxTeamSize: number, submissionsCloseAt: string }) {
+export async function updateEventDetails(eventId: string, data: { name: string, visibility: "DRAFT" | "PUBLIC", maxTeamSize: number, submissionsCloseAt: string, timeZone: string }) {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) throw new Error("Unauthorized");
     if (!(await checkOrganizerAccess(eventId, session.user.id))) throw new Error("Forbidden");
@@ -114,7 +114,8 @@ export async function updateEventDetails(eventId: string, data: { name: string, 
             name: data.name,
             visibility: data.visibility,
             maxTeamSize: data.maxTeamSize,
-            submissionsCloseAt: new Date(data.submissionsCloseAt)
+            submissionsCloseAt: new Date(data.submissionsCloseAt),
+            timeZone: data.timeZone
         }
     });
     revalidatePath(`/organizer/events/${eventId}`);

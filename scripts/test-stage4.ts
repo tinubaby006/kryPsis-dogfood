@@ -106,7 +106,7 @@ async function main() {
         process.exit(1);
     }
 
-    const projectId = resOpen.project.id;
+    const projectId = resOpen.project!.id;
 
     // 3. Completeness Validation (SUBMITTED)
     console.log("Testing completeness validation (SUBMITTED)...");

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CreateTeamForm } from "./CreateTeamForm";
+import { EventDateFormatter } from "../../components/EventDateFormatter";
 
 export default async function PublicEventPage({ params }: { params: Promise<{ eventId: string }> }) {
     const session = await getSession();
@@ -46,13 +47,15 @@ async function PublicEventView({ event, session }: { event: any, session: any })
     return (
         <div className="container mx-auto py-10 px-4 max-w-4xl">
             <h1 className="text-4xl font-bold mb-4">{event.name}</h1>
-            <div className="flex gap-4 mb-6">
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${isClosed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    {isClosed ? 'Submissions Closed' : 'Submissions Open'}
-                </span>
-                <span className="text-gray-600 self-center">
-                    Closes: {new Date(event.submissionsCloseAt).toLocaleString()}
-                </span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+                <EventDateFormatter 
+                    startsAt={event.startsAt}
+                    endsAt={event.endsAt}
+                    submissionsOpenAt={event.submissionsOpenAt}
+                    submissionsCloseAt={event.submissionsCloseAt}
+                    timeZone={event.timeZone}
+                    className="text-lg"
+                />
             </div>
 
             <p className="text-lg text-gray-700 mb-8">{event.description || "No description provided."}</p>

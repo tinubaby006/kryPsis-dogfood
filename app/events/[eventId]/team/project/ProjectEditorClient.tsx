@@ -83,7 +83,9 @@ export default function ProjectEditorClient({ event, team, initialProject }: any
         setLoading(false);
 
         if (res.success) {
-            setVersion(res.project.version);
+            if (res.project) {
+                setVersion(res.project.version);
+            }
             alert(`Project ${status.toLowerCase()} successfully!`);
             router.refresh();
         } else {

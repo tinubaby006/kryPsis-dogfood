@@ -44,7 +44,8 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                                 name: event.name,
                                 visibility: event.visibility,
                                 maxTeamSize: event.maxTeamSize,
-                                submissionsCloseAt: event.submissionsCloseAt
+                                submissionsCloseAt: event.submissionsCloseAt,
+                                timeZone: event.timeZone
                             }} 
                         />
                     </div>

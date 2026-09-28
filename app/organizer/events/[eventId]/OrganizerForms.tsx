@@ -11,6 +11,7 @@ export function EditEventDetailsForm({ event }: { event: any }) {
     const [closesAt, setClosesAt] = useState(
         event.submissionsCloseAt ? new Date(event.submissionsCloseAt).toISOString().slice(0, 16) : ""
     );
+    const [timeZone, setTimeZone] = useState(event.timeZone || "UTC");
     const [loading, setLoading] = useState(false);
 
     const handleSave = async () => {
@@ -20,7 +21,8 @@ export function EditEventDetailsForm({ event }: { event: any }) {
                 name,
                 visibility,
                 maxTeamSize: parseInt(maxTeamSize, 10) || 4,
-                submissionsCloseAt: closesAt ? new Date(closesAt).toISOString() : new Date().toISOString()
+                submissionsCloseAt: closesAt ? new Date(closesAt).toISOString() : new Date().toISOString(),
+                timeZone
             });
             alert("Event updated successfully!");
         } catch (e: any) {
@@ -48,7 +50,9 @@ export function EditEventDetailsForm({ event }: { event: any }) {
             </div>
             <div>
                 <label className="block text-sm font-medium mb-1">Submissions Close At (Local Time)</label>
-                <input type="datetime-local" className="border p-2 rounded w-full" value={closesAt} onChange={e => setClosesAt(e.target.value)} />
+                <input type="datetime-local" className="border p-2 rounded w-full mb-2" value={closesAt} onChange={e => setClosesAt(e.target.value)} />
+                <label className="block text-sm font-medium mb-1">Timezone (IANA)</label>
+                <input type="text" placeholder="e.g. UTC, Asia/Kolkata, America/New_York" className="border p-2 rounded w-full" value={timeZone} onChange={e => setTimeZone(e.target.value)} />
             </div>
             <button disabled={loading} onClick={handleSave} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Event Details</button>
         </div>

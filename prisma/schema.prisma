@@ -130,6 +130,7 @@ model Event {
   endsAt             DateTime?  @db.Timestamptz
   submissionsOpenAt  DateTime?  @db.Timestamptz
   submissionsCloseAt DateTime   @db.Timestamptz
+  timeZone           String     @default("UTC")
   visibility         Visibility @default(DRAFT)
   maxTeamSize        Int        @default(4)
   createdById        String
