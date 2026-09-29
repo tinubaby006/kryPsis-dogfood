@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dogfood
+      POSTGRES_PASSWORD: dogfoodpassword
+      POSTGRES_DB: dogfood_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dogfood -d dogfood_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - DATABASE_URL=postgres://dogfood:dogfoodpassword@db:5432/dogfood_db?schema=public
+      - BETTER_AUTH_SECRET=fallback_secret_for_offline_demo_only_1234567890
+      - BETTER_AUTH_URL=http://127.0.0.1:3000
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

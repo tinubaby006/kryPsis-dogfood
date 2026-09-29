@@ -65,7 +65,7 @@ participant = "Cookie: better-auth.session_token=${pSession}"
 
 [routes]
 gallery      = "/events/evt_01/projects"
-submit       = "/events/evt_01/team/project"
+submit       = "/api/submit"
 judge_scores = "/dashboard/judging"
 peer_scores  = "/dashboard/judging?judge=judge_a"
 csv_export   = "/api/export.csv"
