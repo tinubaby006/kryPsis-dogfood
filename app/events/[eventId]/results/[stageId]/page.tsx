@@ -15,7 +15,7 @@ export default async function PublicLeaderboard({ params }: { params: Promise<{ 
 
     // Secure checking: the payload must be published.
     const isPublished = (stage.outputPolicy as any)?.isPublished === true;
-    if (stage.state !== "PUBLISHED" && !isPublished) {
+    if (stage.state !== "FINALIZED" || !isPublished) {
         return (
             <div className="max-w-4xl mx-auto p-4 sm:p-8 text-center pt-20">
                 <ShieldCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -86,7 +86,7 @@ export default async function PublicLeaderboard({ params }: { params: Promise<{ 
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="inline-flex items-center justify-center bg-primary/10 text-primary font-bold px-4 py-2 rounded-full text-lg border border-primary/20">
-                                            {r.displayedMean.toFixed(2)}
+                                            {r.normalizedMean.toFixed(2)}
                                         </div>
                                     </td>
                                 </tr>

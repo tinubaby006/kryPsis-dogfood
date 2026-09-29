@@ -26,8 +26,8 @@ export default function OrganizerExplainabilityView({ params }: { params: { even
         if (res.error) setError(res.error);
         else {
             setPreview(res.preview);
-            if (res.preview?.stageState === "PUBLISHED" || (res.preview?.stagePolicy as any)?.isPublished) {
-                setPublished(true);
+            if ((res as any).stageState === "FINALIZED") {
+                // We'll check the published state from the fetch below
             }
         }
         setLoading(false);

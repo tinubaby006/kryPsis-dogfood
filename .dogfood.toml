@@ -2,14 +2,14 @@
 base_url = "http://127.0.0.1:3000"
 
 [auth]
-organizer   = "Cookie: better-auth.session_token=dummy_org"
-judge_a     = "Cookie: better-auth.session_token=dummy_jdg_a"
-judge_b     = "Cookie: better-auth.session_token=dummy_jdg_b"
-participant = "Cookie: better-auth.session_token=dummy_prt"
+organizer   = "Cookie: better-auth.session_token=49J3VhSZOfMzb5sfWFNd9FWLG6GOnfuJ.YSli7r5VnrCEeQZJErGIecXkhuWMlTpevCm9zg7sq4U%3D"
+judge_a     = "Cookie: better-auth.session_token=1aaYAZl45I4mNaYrzLj1dQIcPNTkJ0zS.q9cmBAqTqbtPHpxEh3RUCe01Cf7z3Ppxsb3rQY8uan0%3D"
+judge_b     = "Cookie: better-auth.session_token=vogAPLTBIU0qQR3ot6WUGkO7RdKzHsh6.%2BX3dXv7Flv7HYQldmn8etX2b2bMWVxqlyfjrlnoeLOE%3D"
+participant = "Cookie: better-auth.session_token=mF3hX1kgjSgI6EBA0XRDPnwJ0kfGgJgt.YyvI9F4im%2FjlsgQPHSaqutlwHHCfQHcPcBhNRB%2F6rpQ%3D"
 
 [routes]
 gallery      = "/events/evt_01/projects"
 submit       = "/api/submit"
-judge_scores = "/dashboard/judging"
-peer_scores  = "/dashboard/judging?judge=judge_a"
-csv_export   = "/api/export.csv"
+judge_scores = "/api/judge/scores"
+peer_scores  = "/api/judge/scores?judgeUserId=a23OKwUUoM9vJn2BAOAyHHdfS5hjY9Tp"
+csv_export   = "/organizer/events/evt_01/exports?type=results&stageId=evt01_stage_1"
