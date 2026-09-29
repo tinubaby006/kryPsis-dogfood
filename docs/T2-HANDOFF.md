@@ -31,7 +31,8 @@ For testing with the official runner, the official runner parses `.dogfood.toml`
 
 After running the reset and config generation scripts, the following guaranteed accounts are available for testing the different personas. The password for all accounts is **`dogfoodpassword`**:
 
-- **Organizer / Admin**: `new_org@test.com`
+- **Platform Admin**: `new_org@test.com`
+- **Event Creator (Organizer)**: `new_creator@test.com`
 - **Judge A**: `new_jdg_a@test.com`
 - **Judge B**: `new_jdg_b@test.com`
 - **Participant (Public)**: `new_prt@test.com`

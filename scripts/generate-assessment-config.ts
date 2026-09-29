@@ -21,7 +21,9 @@ async function getSessionToken(email: string, role?: 'ORGANIZER'|'JUDGE', eventI
         const json = await res.json();
         
         if (role === 'ORGANIZER') {
-            await prisma.user.update({ where: { email }, data: { isPlatformAdmin: true } });
+            await prisma.user.update({ where: { email }, data: { isPlatformAdmin: true, canCreateEvents: true } });
+        } else if (role === 'EVENT_CREATOR') {
+            await prisma.user.update({ where: { email }, data: { isPlatformAdmin: false, canCreateEvents: true } });
         } else if (role === 'JUDGE') {
             await prisma.eventRole.upsert({
                 where: { eventId_userId_role: { eventId: "evt_01", userId: json.user.id, role: "JUDGE" } },
@@ -47,6 +49,7 @@ async function main() {
     console.log("Generating official assessment configuration...");
     
     const org = await getSessionToken('new_org@test.com', 'ORGANIZER');
+    const creator = await getSessionToken('new_creator@test.com', 'EVENT_CREATOR');
     const jdgA = await getSessionToken('new_jdg_a@test.com', 'JUDGE');
     const jdgB = await getSessionToken('new_jdg_b@test.com', 'JUDGE');
     const prt = await getSessionToken('new_prt@test.com');

@@ -56,7 +56,8 @@ Once the database is seeded and the configuration is generated, you can log in u
 
 | Role | Email | Description |
 | :--- | :--- | :--- |
-| **Organizer (Admin)** | `new_org@test.com` | Full platform access. Can create stages, assign judges, and publish results. |
+| **Platform Admin** | `new_org@test.com` | Full platform access. Can create events, manage stages, assign judges, and publish results across the platform. |
+| **Event Creator (Organizer)** | `new_creator@test.com` | A non-admin organizer who specifically has the `canCreateEvents` permission to create and manage their own events. |
 | **Judge** | `new_jdg_a@test.com` | Can view assigned projects, submit scores, and save drafts. |
 | **Judge (Peer)** | `new_jdg_b@test.com` | A second judge to demonstrate overlap and WLS calculation. |
 | **Participant** | `new_prt@test.com` | Restricted access. Can only view public gallery and published results. |
