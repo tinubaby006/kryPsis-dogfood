@@ -11,7 +11,7 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
     
     if (!session?.user) {
         return (
-            <div className="p-8 text-center text-red-600 font-bold">
+            <div className="p-8 text-center text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">
                 401 UNAUTHORIZED: Please log in.
             </div>
         );
@@ -21,7 +21,7 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
         await requireJudgeAccess(eventId);
     } catch (e: any) {
         return (
-            <div className="p-8 text-center text-red-600 font-bold">
+            <div className="p-8 text-center text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">
                 {e.message}
             </div>
         );
@@ -49,18 +49,18 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
 
     return (
         <div className="max-w-5xl mx-auto p-4 sm:p-8">
-            <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Judging Dashboard</h1>
-            <p className="text-gray-600 mb-8">{event.name}</p>
+            <h1 className="text-3xl font-extrabold text-foreground mb-2">Judging Dashboard</h1>
+            <p className="text-muted-foreground mb-8">{event.name}</p>
 
             <div className="grid md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 space-y-6">
-                    <div className="bg-white p-6 rounded-xl border shadow-sm">
-                        <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-                            <Clock className="w-5 h-5 text-blue-600" />
+                    <div className="bg-card p-6 rounded-xl border border-border shadow-sm">
+                        <h2 className="font-bold text-lg mb-4 flex items-center gap-2 text-foreground">
+                            <Clock className="w-5 h-5 text-primary" />
                             Your Stages
                         </h2>
                         {activeStages.length === 0 ? (
-                            <p className="text-sm text-gray-500 italic">No active judging stages for you.</p>
+                            <p className="text-sm text-muted-foreground italic">No active judging stages for you.</p>
                         ) : (
                             <ul className="space-y-4">
                                 {activeStages.map(stage => {
@@ -70,15 +70,15 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
                                     const isSubmittable = stage.state === "OPEN";
 
                                     return (
-                                        <li key={stage.id} className="border-b pb-3 last:border-0 last:pb-0">
-                                            <div className="font-medium text-gray-900 flex justify-between items-center">
+                                        <li key={stage.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                                            <div className="font-medium text-foreground flex justify-between items-center">
                                                 {stage.name}
-                                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${isSubmittable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-bold border ${isSubmittable ? 'bg-success/10 text-success border-success/20' : 'bg-muted text-muted-foreground border-border'}`}>
                                                     {stage.state}
                                                 </span>
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                                                <span>Progress: {completed} / {total}</span>
+                                            <div className="text-xs text-muted-foreground mt-1 flex justify-between">
+                                                <span>Progress: <strong className={completed === total && total > 0 ? 'text-success' : ''}>{completed} / {total}</strong></span>
                                             </div>
                                         </li>
                                     );
@@ -89,46 +89,48 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
                 </div>
 
                 <div className="md:col-span-2">
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                        <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
-                            <h2 className="font-bold text-lg">Your Assignments</h2>
+                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-border bg-muted/50 flex justify-between items-center">
+                            <h2 className="font-bold text-lg text-foreground">Your Assignments</h2>
                         </div>
                         
                         {assignments.length === 0 ? (
-                            <div className="p-8 text-center text-gray-500">
-                                <p>You have no pending assignments.</p>
+                            <div className="flex flex-col items-center justify-center p-12 text-center bg-muted/10">
+                                <Circle className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+                                <h3 className="text-lg font-bold text-foreground mb-1">No Pending Assignments</h3>
+                                <p className="text-sm text-muted-foreground">You currently have no projects assigned to review.</p>
                             </div>
                         ) : (
-                            <ul className="divide-y divide-gray-200">
+                            <ul className="divide-y divide-border">
                                 {assignments.map(a => {
                                     const hasFinal = !!a.finalReview;
                                     const hasDraft = !!a.reviewDraft;
                                     const isOpen = a.stage.state === "OPEN";
                                     
                                     return (
-                                        <li key={a.id} className="p-6 hover:bg-gray-50 transition-colors">
-                                            <div className="flex justify-between items-start">
+                                        <li key={a.id} className="p-6 hover:bg-muted/30 transition-colors">
+                                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                                                 <div>
-                                                    <h3 className="font-bold text-gray-900 text-lg mb-1">{a.project.title}</h3>
-                                                    <p className="text-sm text-gray-600 mb-2">Stage: {a.stage.name}</p>
+                                                    <h3 className="font-bold text-foreground text-lg mb-1">{a.project.title}</h3>
+                                                    <p className="text-sm text-muted-foreground mb-3">Stage: <strong className="text-foreground">{a.stage.name}</strong></p>
                                                     
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
                                                         {hasFinal ? (
-                                                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded">
+                                                            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold bg-success/10 text-success border border-success/20 px-2 py-1 rounded">
                                                                 <CheckCircle2 className="w-3 h-3" /> Submitted
                                                             </span>
                                                         ) : hasDraft ? (
-                                                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                                                            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold bg-warning/10 text-warning border border-warning/20 px-2 py-1 rounded">
                                                                 <Clock className="w-3 h-3" /> Draft Saved
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                                                            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold bg-muted text-muted-foreground border border-border px-2 py-1 rounded">
                                                                 <Circle className="w-3 h-3" /> Pending
                                                             </span>
                                                         )}
                                                         
                                                         {!isOpen && !hasFinal && (
-                                                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded">
+                                                            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold bg-destructive/10 text-destructive-text border border-destructive/20 px-2 py-1 rounded">
                                                                 <AlertCircle className="w-3 h-3" /> Stage {a.stage.state}
                                                             </span>
                                                         )}
@@ -137,10 +139,10 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
                                                 
                                                 <Link 
                                                     href={`/events/${eventId}/judge/assignments/${a.id}`}
-                                                    className={`px-4 py-2 rounded font-medium text-sm transition-colors ${
-                                                        hasFinal ? 'bg-gray-100 text-gray-800 hover:bg-gray-200' : 
-                                                        !isOpen ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' :
-                                                        'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                                                    className={`px-4 py-2 rounded font-medium text-sm transition-colors w-full sm:w-auto text-center focus:ring-2 focus:ring-ring focus:outline-none ${
+                                                        hasFinal ? 'bg-muted text-muted-foreground border border-border hover:bg-border/50' : 
+                                                        !isOpen ? 'bg-muted/50 text-muted-foreground border border-border/50 cursor-not-allowed pointer-events-none' :
+                                                        'bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm'
                                                     }`}
                                                 >
                                                     {hasFinal ? 'View Review' : 'Judge Project'}

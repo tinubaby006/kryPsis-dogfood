@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { createOrUpdateJudgingStage, saveRubricConfig, startAssignments, getAssignmentPreviewAction, commitAssignmentAction } from "./judging-actions";
-import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle } from "lucide-react";
+import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle, Activity, Calculator } from "lucide-react";
+import Link from "next/link";
 
 export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: string, stages: any[], tracks: any[] }) {
     const [isAdding, setIsAdding] = useState(false);
@@ -30,8 +31,16 @@ export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: str
             )}
 
             {stages.length === 0 && !isAdding ? (
-                <div className="text-sm text-muted-foreground p-6 text-center border border-dashed border-border rounded-lg">
-                    No judging stages configured yet.
+                <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed border-border rounded-lg bg-muted/10">
+                    <Gavel className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+                    <h3 className="text-lg font-bold text-foreground mb-1">No Judging Stages</h3>
+                    <p className="text-sm text-muted-foreground mb-4 max-w-md">Create your first judging stage to configure rubrics, assign judges, and begin scoring projects.</p>
+                    <button 
+                        onClick={() => setIsAdding(true)}
+                        className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary-hover font-medium transition-colors shadow-sm flex items-center gap-2 focus:ring-2 focus:ring-ring focus:outline-none"
+                    >
+                        <Plus className="w-4 h-4" /> Create Stage
+                    </button>
                 </div>
             ) : (
                 <div className="space-y-6">
@@ -164,6 +173,32 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
                     <StageForm eventId={eventId} stage={stage} tracks={tracks} onComplete={() => setIsEditing(false)} />
                 ) : (
                     <RubricManager eventId={eventId} stage={stage} />
+                )}
+
+                {/* Workflow Links for active/past stages */}
+                {!["DRAFT", "CONFIGURED", "ASSIGNING"].includes(stage.state) && (
+                    <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-2">
+                        <Link 
+                            href={`/organizer/events/${eventId}/progress/${stage.id}`}
+                            className="text-xs font-medium bg-muted text-foreground px-3 py-1.5 rounded-md hover:bg-border transition-colors border border-border flex items-center gap-1 shadow-sm"
+                        >
+                            <Activity className="w-3 h-3" /> Progress Telemetry
+                        </Link>
+                        {["CALCULATING", "FINALIZED", "PUBLISHED"].includes(stage.state) && (
+                            <Link 
+                                href={`/organizer/events/${eventId}/results/${stage.id}`}
+                                className="text-xs font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                <Calculator className="w-3 h-3" /> Explainability & Results
+                            </Link>
+                        )}
+                        <a 
+                            href={`/organizer/events/${eventId}/exports`}
+                            className="text-xs font-medium text-link hover:underline px-3 py-1.5 flex items-center gap-1"
+                        >
+                            Go to Exports
+                        </a>
+                    </div>
                 )}
             </div>
         </div>

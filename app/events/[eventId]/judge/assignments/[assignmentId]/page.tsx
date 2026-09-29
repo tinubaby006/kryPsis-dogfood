@@ -15,7 +15,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
         authContext = await requireJudgeAccess(eventId, assignmentId);
     } catch (e: any) {
         return (
-            <div className="p-8 text-center text-red-600 font-bold">
+            <div className="p-8 text-center text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">
                 {e.message}
             </div>
         );
@@ -47,7 +47,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
     });
 
     if (!rubricVersion) {
-        return <div className="p-8 text-red-600">Configuration Error: No rubric found for this stage.</div>;
+        return <div className="p-8 text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">Configuration Error: No rubric found for this stage.</div>;
     }
 
     // Fetch assignment data (draft, final review)
@@ -58,14 +58,14 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
 
     return (
         <div className="max-w-6xl mx-auto p-4 sm:p-8">
-            <div className="mb-6 flex justify-between items-end">
+            <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
-                    <Link href={`/events/${eventId}/judge`} className="text-blue-600 hover:underline font-medium flex items-center gap-1 mb-4">
+                    <Link href={`/events/${eventId}/judge`} className="text-link hover:underline font-medium flex items-center gap-1 mb-4 focus:ring-2 focus:ring-ring focus:outline-none rounded w-max">
                         <ChevronLeft className="w-4 h-4" /> Back to Dashboard
                     </Link>
-                    <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Reviewing: {p.title}</h1>
-                    <div className="flex gap-4 text-sm text-gray-600">
-                        <span>Stage: <strong>{stage.name}</strong></span>
+                    <h1 className="text-3xl font-extrabold text-foreground mb-2">Reviewing: {p.title}</h1>
+                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                        <span>Stage: <strong className="text-foreground">{stage.name}</strong></span>
                         {stage.startsAt && stage.endsAt && (
                             <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" /> {stage.startsAt.toLocaleDateString()} - {stage.endsAt.toLocaleDateString()}
@@ -78,22 +78,22 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
             <div className="grid lg:grid-cols-2 gap-8">
                 {/* Left Column: Project Snapshot */}
                 <div className="space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                        <div className="p-6 border-b bg-gray-50">
-                            <h2 className="text-xl font-bold text-gray-900">Project Details</h2>
+                    <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+                        <div className="p-6 border-b border-border bg-muted/50">
+                            <h2 className="text-xl font-bold text-foreground">Project Details</h2>
                         </div>
                         <div className="p-6">
-                            <p className="text-gray-700 mb-4">{p.summary}</p>
+                            <p className="text-foreground mb-4">{p.summary}</p>
                             
-                            <h3 className="font-bold text-gray-900 mt-6 mb-2">Description</h3>
-                            <div className="prose max-w-none text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 p-4 rounded border">
+                            <h3 className="font-bold text-foreground mt-6 mb-2">Description</h3>
+                            <div className="prose max-w-none text-sm text-foreground whitespace-pre-wrap bg-muted/30 p-4 rounded-md border border-border">
                                 {p.description}
                             </div>
 
                             {p.demoVideoUrl && (
                                 <div className="mt-6">
-                                    <h3 className="font-bold text-gray-900 mb-2">Demo Video</h3>
-                                    <a href={p.demoVideoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-sm">
+                                    <h3 className="font-bold text-foreground mb-2">Demo Video</h3>
+                                    <a href={p.demoVideoUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-all text-sm focus:ring-2 focus:ring-ring focus:outline-none rounded">
                                         {p.demoVideoUrl}
                                     </a>
                                 </div>
@@ -101,10 +101,10 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
 
                             {p.assets.length > 0 && (
                                 <div className="mt-6">
-                                    <h3 className="font-bold text-gray-900 mb-3">Gallery</h3>
+                                    <h3 className="font-bold text-foreground mb-3">Gallery</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         {p.assets.map((a: any) => (
-                                            <div key={a.storageKey} className="aspect-video relative rounded overflow-hidden border">
+                                            <div key={a.storageKey} className="aspect-video relative rounded overflow-hidden border border-border">
                                                 <img 
                                                     src={`/api/assets/${a.storageKey}`} 
                                                     alt={a.originalName} 
@@ -116,11 +116,11 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
                                 </div>
                             )}
 
-                            <div className="mt-6 pt-6 border-t">
-                                <h3 className="font-bold text-gray-900 mb-3">Links</h3>
+                            <div className="mt-6 pt-6 border-t border-border">
+                                <h3 className="font-bold text-foreground mb-3">Links</h3>
                                 <ul className="space-y-2 text-sm">
-                                    {p.repoUrl && <li><a href={p.repoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Source Code Repository</a></li>}
-                                    {p.liveUrl && <li><a href={p.liveUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Live Application</a></li>}
+                                    {p.repoUrl && <li><a href={p.repoUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:underline focus:ring-2 focus:ring-ring focus:outline-none rounded">Source Code Repository</a></li>}
+                                    {p.liveUrl && <li><a href={p.liveUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:underline focus:ring-2 focus:ring-ring focus:outline-none rounded">Live Application</a></li>}
                                 </ul>
                             </div>
                         </div>
@@ -129,10 +129,10 @@ export default async function AssignmentPage({ params }: { params: Promise<{ eve
 
                 {/* Right Column: Rubric Review Workbench */}
                 <div className="space-y-6">
-                    <div className="bg-gray-50 rounded-xl shadow-sm border overflow-hidden sticky top-6">
-                        <div className="p-6 border-b bg-white flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-gray-900">Rubric Form</h2>
-                            <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    <div className="bg-muted/10 rounded-xl shadow-sm border border-border overflow-hidden sticky top-6">
+                        <div className="p-6 border-b border-border bg-card flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-foreground">Rubric Form</h2>
+                            <span className="text-xs font-mono bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded font-bold uppercase tracking-wider">
                                 v{rubricVersion.id.slice(-6)}
                             </span>
                         </div>

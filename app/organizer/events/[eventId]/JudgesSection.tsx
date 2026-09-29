@@ -165,7 +165,10 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
             {loading ? (
                 <div className="text-sm text-muted-foreground p-4 text-center">Loading judges...</div>
             ) : accesses.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-6 text-center border border-dashed border-border rounded-lg">No judges provisioned yet.</div>
+                <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed border-border rounded-lg bg-muted/10">
+                    <h3 className="text-lg font-bold text-foreground mb-1">No Judges Provisioned</h3>
+                    <p className="text-sm text-muted-foreground max-w-md">Use the form above to grant judging access to user emails and assign them to specific tracks.</p>
+                </div>
             ) : (
                 <ul className="space-y-3">
                     {accesses.map(a => (
