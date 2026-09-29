@@ -1,93 +1,77 @@
-# DOGFOOD HACKATHON
+# DOGFOOD 2026 Platform
 
-A self-hosted hackathon platform for managing the complete hackathon lifecycle — from event creation and participant registration to team formation, project submission, and judging.
+An offline-capable, highly resilient hackathon management and judging platform built for the DOGFOOD 2026 challenge (T2 Tier). This platform enables organizers to configure events, judging stages, rubric criteria, and tracks while providing judges with an intuitive workbench to assign, review, and score projects. 
 
-## Features
+The system incorporates robust mathematical normalization (Weighted Least Squares), dispute resolution, and assignment dropout repair logic—all designed to operate flawlessly without an active internet connection.
 
-* Event creation and administration
-* Participant registration and authentication
-* Team creation and invitations
-* Shared team projects
-* Project submission and deadline enforcement
-* Project image uploads
-* Public project gallery
-* Role-based access control
-* Configurable hackathon tracks, prizes, and questions
-* Extensible judging architecture
+## 🛠 Tech Stack
 
-## Tech Stack
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Database**: PostgreSQL
+- **ORM**: [Prisma ORM v7](https://www.prisma.io/)
+- **Authentication**: [Better Auth](https://better-auth.com/)
+- **Styling**: Tailwind CSS + [shadcn/ui](https://ui.shadcn.com/) (using local fonts for offline capability)
+- **Containerization**: Docker & Docker Compose
 
-* **Next.js** — application framework
-* **TypeScript** — type safety
-* **React** — UI
-* **Tailwind CSS** — styling
-* **SQLite** — local database
-* **Drizzle ORM** — database access
-* **Zod** — validation
-* **Argon2id** — password hashing
-* **Vitest** — unit testing
-* **Playwright** — end-to-end testing
-* **Docker** — local deployment
+## Getting Started
 
-## Architecture
+Follow these instructions to set up the platform locally. The application and its services have been explicitly engineered to function reliably even when isolated from external networks.
 
-DOGFOOD follows a simple layered architecture:
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
+- Docker & Docker Compose
+- Python 3.10+ (optional, for running the official test runner)
 
-```text
-UI
- ↓
-Routes / API
- ↓
-Authentication & Authorization
- ↓
-Business Logic
- ↓
-Drizzle ORM
- ↓
-SQLite
-```
+### Installation & Setup
 
-The platform is designed as a single coherent application rather than a collection of separate services.
+1. **Clone the repository and install dependencies:**
+   ```bash
+   npm install
+   ```
 
-## Local Development
+2. **Start the database:**
+   Use Docker Compose to start the isolated PostgreSQL database in the background:
+   ```bash
+   docker compose up -d db
+   ```
 
-The project is designed to run locally without external runtime dependencies.
+3. **Reset and seed the database:**
+   Run the following commands to apply migrations, seed the local test database with fixtures, and generate the required offline testing configurations (`.dogfood.toml`):
+   ```bash
+   npx prisma migrate reset --force
+   npm run generate-config
+   ```
 
+4. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+   The platform will now be accessible at [http://localhost:3000](http://localhost:3000).
+
+5. **Production Build (Optional):**
+   To test the production optimized build, run:
+   ```bash
+   npm run build
+   npm run start
+   ```
+
+## 🧪 Testing and Acceptance
+
+This project implements all T1 and T2 requirements. It is packaged with an official runner script that performs end-to-end security, API, and algorithmic validation.
+
+To run the verification suite:
 ```bash
-docker compose up
+# Ensure the Next.js server is running (npm run dev or npm run start)
+python docs/official/run.py .dogfood.toml
 ```
 
-The local environment includes:
+An exact final output of this acceptance run has been preserved in `acceptance-report.txt`.
 
-* Application
-* SQLite database
-* Persistent uploaded images
-* Database migrations
-* Seed data
+## 📂 Documentation
 
-## Project Structure
-
-```text
-app/
-components/
-lib/
-db/
-tests/
-public/
-```
-
-The exact structure may evolve as development progresses.
-
-## Judging
-
-DOGFOOD includes an extensible judging architecture supporting configurable judging stages, judge assignment, scoring, and multi-track judging.
-
-Detailed judging design and mathematics are documented separately in [`JUDGING.md`](JUDGING.md).
-
-## Project Status
-
-DOGFOOD is being developed incrementally, with the core hackathon lifecycle implemented first and advanced judging capabilities built on top of it.
-
-## License
-
-This project is intended to be released under an OSI-approved open-source license.
+Detailed implementation and handover documentation can be found in the `/docs` directory:
+- `docs/T2-DECISIONS.md`: Explains core algorithm selections and repository integration choices.
+- `docs/T2-IMPLEMENTATION-MAP.md`: Highlights exactly how T2 specs map to the underlying Prisma models and frontend interfaces.
+- `docs/T2-HANDOFF.md`: Official startup sequences, reset commands, and database export guides.
