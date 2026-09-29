@@ -2,14 +2,14 @@
 base_url = "http://127.0.0.1:3000"
 
 [auth]
-organizer   = "Cookie: better-auth.session_token=49J3VhSZOfMzb5sfWFNd9FWLG6GOnfuJ.YSli7r5VnrCEeQZJErGIecXkhuWMlTpevCm9zg7sq4U%3D"
-judge_a     = "Cookie: better-auth.session_token=1aaYAZl45I4mNaYrzLj1dQIcPNTkJ0zS.q9cmBAqTqbtPHpxEh3RUCe01Cf7z3Ppxsb3rQY8uan0%3D"
-judge_b     = "Cookie: better-auth.session_token=vogAPLTBIU0qQR3ot6WUGkO7RdKzHsh6.%2BX3dXv7Flv7HYQldmn8etX2b2bMWVxqlyfjrlnoeLOE%3D"
-participant = "Cookie: better-auth.session_token=mF3hX1kgjSgI6EBA0XRDPnwJ0kfGgJgt.YyvI9F4im%2FjlsgQPHSaqutlwHHCfQHcPcBhNRB%2F6rpQ%3D"
+organizer   = "Cookie: better-auth.session_token=UkWgZaFBU7dowubeB364Zep32nfge52j.PqjzQ3VGnU4jZZCJHZxrlO2cC%2FVsv6sWiY%2FVVok2i%2BE%3D"
+judge_a     = "Cookie: better-auth.session_token=iAj71HQqbKWKFFtu0gInAUMyOLZBWx3t.RQUHHF3uigfZvksPjlTlrFZ%2FIvFAYYdpZMC4%2FrJTF8Q%3D"
+judge_b     = "Cookie: better-auth.session_token=sGC3NmJIbUzxTsgfgYNKTnn9WspZPSNO.GDLggW3b7thLWVa8Wzh5A4QiwXlWKKISHT3dMsbFYTY%3D"
+participant = "Cookie: better-auth.session_token=JsGaTLU0eMIK7XOGWkLAgtsxoGeCSKzH.sSqYFAbFMnhX0gv6Z2CGf2B8EU3aH1dttGuiwUrJ8mY%3D"
 
 [routes]
 gallery      = "/events/evt_01/projects"
 submit       = "/api/submit"
 judge_scores = "/api/judge/scores"
-peer_scores  = "/api/judge/scores?judgeUserId=a23OKwUUoM9vJn2BAOAyHHdfS5hjY9Tp"
+peer_scores  = "/api/judge/scores?judgeUserId=L4vFblhxOr0ozlpz2Dy9gKl3FBpFyamI"
 csv_export   = "/organizer/events/evt_01/exports?type=results&stageId=evt01_stage_1"
