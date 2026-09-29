@@ -50,6 +50,19 @@ Follow these instructions to set up the platform locally. The application and it
    ```
    The platform will now be accessible at [http://localhost:3000](http://localhost:3000).
 
+### 🔑 Test Credentials
+
+Once the database is seeded and the configuration is generated, you can log in using the following test accounts. The password for all accounts is **`dogfoodpassword`**.
+
+| Role | Email | Description |
+| :--- | :--- | :--- |
+| **Organizer (Admin)** | `new_org@test.com` | Full platform access. Can create stages, assign judges, and publish results. |
+| **Judge** | `new_jdg_a@test.com` | Can view assigned projects, submit scores, and save drafts. |
+| **Judge (Peer)** | `new_jdg_b@test.com` | A second judge to demonstrate overlap and WLS calculation. |
+| **Participant** | `new_prt@test.com` | Restricted access. Can only view public gallery and published results. |
+
+*(Note: The original fixture users such as `platform_admin@dogfood.local` or `tomas.varga@example.org` are also available in the database with the same password).*
+
 5. **Production Build (Optional):**
    To test the production optimized build, run:
    ```bash

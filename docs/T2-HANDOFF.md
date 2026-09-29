@@ -27,6 +27,15 @@ curl "http://127.0.0.1:3000/organizer/events/{eventId}/exports?type=results&stag
 ```
 For testing with the official runner, the official runner parses `.dogfood.toml` and accesses the export endpoints directly.
 
+## Test Credentials
+
+After running the reset and config generation scripts, the following guaranteed accounts are available for testing the different personas. The password for all accounts is **`dogfoodpassword`**:
+
+- **Organizer / Admin**: `new_org@test.com`
+- **Judge A**: `new_jdg_a@test.com`
+- **Judge B**: `new_jdg_b@test.com`
+- **Participant (Public)**: `new_prt@test.com`
+
 ## Verifying Offline Packaging
 The repository has been modified to run fully locally without external networking:
 - Fonts have been integrated without external CDN calls.
