@@ -10,33 +10,38 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now()) @db.Timestamptz
-  updatedAt     DateTime  @updatedAt @db.Timestamptz
-  isPlatformAdmin Boolean @default(false)
-  canCreateEvents Boolean @default(false)
-  
-  sessions      Session[]
-  accounts      Account[]
-  eventRoles    EventRole[]
-  assessmentCredentials AssessmentCredential[]
-  createdEvents Event[]
-  createdTeams  Team[]
-  teamMemberships TeamMember[]
-  createdInvites TeamInvite[]
-  judgedTracks  JudgeTrack[]
-  reviews       Review[]
-  uploadedAssets ProjectAsset[]
-  organizerRequests OrganizerAccessRequest[]
-  reviewedRequests  OrganizerAccessRequest[] @relation("ReviewerAdmin")
+  id              String   @id @default(cuid())
+  name            String
+  email           String
+  emailVerified   Boolean  @default(false)
+  image           String?
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  isPlatformAdmin Boolean  @default(false)
+  canCreateEvents Boolean  @default(false)
 
-  judgeAccesses         EventJudgeAccess[] @relation("JudgeUser")
-  invitedJudgeAccesses  EventJudgeAccess[] @relation("InvitedByAdmin")
-  confirmedJudgeAccesses EventJudgeAccess[] @relation("ConfirmedByAdmin")
+  sessions              Session[]
+  accounts              Account[]
+  eventRoles            EventRole[]
+  assessmentCredentials AssessmentCredential[]
+  createdEvents         Event[]
+  createdTeams          Team[]
+  teamMemberships       TeamMember[]
+  createdInvites        TeamInvite[]
+  judgedTracks          JudgeTrack[]
+  reviews               Review[]
+  uploadedAssets        ProjectAsset[]
+  organizerRequests     OrganizerAccessRequest[]
+  reviewedRequests      OrganizerAccessRequest[] @relation("ReviewerAdmin")
+
+  judgeAccesses          EventJudgeAccess[]     @relation("JudgeUser")
+  invitedJudgeAccesses   EventJudgeAccess[]     @relation("InvitedByAdmin")
+  confirmedJudgeAccesses EventJudgeAccess[]     @relation("ConfirmedByAdmin")
+  stageJudges            StageJudge[]
+  rubricAssignments      RubricAssignment[]
+  reviewDrafts           ReviewDraft[]
+  judgeCalibrations      JudgeCalibration[]
+  finalizationSnapshots  FinalizationSnapshot[]
 
   @@unique([email])
   @@map("user")
@@ -104,22 +109,22 @@ model EventRole {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId, role])
 }
 
 model AssessmentCredential {
-  id         String    @id @default(cuid())
-  userId     String
-  tokenHash  String    @unique
-  label      String
-  expiresAt  DateTime  @db.Timestamptz
-  revokedAt  DateTime? @db.Timestamptz
-  createdAt  DateTime  @default(now()) @db.Timestamptz
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  label     String
+  expiresAt DateTime  @db.Timestamptz
+  revokedAt DateTime? @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
 
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum Visibility {
@@ -144,7 +149,7 @@ model Event {
   createdAt          DateTime   @default(now()) @db.Timestamptz
   updatedAt          DateTime   @updatedAt @db.Timestamptz
 
-  creator         User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  creator         User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
   eventRoles      EventRole[]
   tracks          Track[]
   prizes          Prize[]
@@ -154,6 +159,7 @@ model Event {
   criteria        Criterion[]
   reviews         Review[]
   judgeAccesses   EventJudgeAccess[]
+  judgingStages   JudgingStage[]
 }
 
 model Track {
@@ -163,10 +169,11 @@ model Track {
   description String @default("")
   sortOrder   Int
 
-  event        Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  judgeTracks  JudgeTrack[]
-  projects     Project[]
+  event             Event                   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  judgeTracks       JudgeTrack[]
+  projects          Project[]
   judgeAccessTracks EventJudgeAccessTrack[]
+  judgingStages     JudgingStage[]
 
   @@unique([id, eventId])
 }
@@ -218,10 +225,10 @@ model Team {
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
 
-  event   Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  creator User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  members TeamMember[]
-  invites TeamInvite[]
+  event    Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  creator  User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  members  TeamMember[]
+  invites  TeamInvite[]
   projects Project[]
 
   @@unique([id, eventId])
@@ -304,12 +311,15 @@ model Project {
   createdAt     DateTime      @default(now()) @db.Timestamptz
   updatedAt     DateTime      @updatedAt @db.Timestamptz
 
-  event   Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  team    Team           @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
-  track   Track?         @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
-  assets  ProjectAsset[]
-  answers CustomAnswer[]
-  reviews Review[]
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  team              Team               @relation(fields: [teamId, eventId], references: [id, eventId], onDelete: Restrict)
+  track             Track?             @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+  assets            ProjectAsset[]
+  answers           CustomAnswer[]
+  reviews           Review[]
+  stageProjects     StageProject[]
+  rubricAssignments RubricAssignment[]
+  projectResults    ProjectResult[]
 
   @@unique([id, eventId])
 }
@@ -408,28 +418,28 @@ model CriterionScore {
 }
 
 model FixtureImport {
-  id             String        @id @default(cuid())
-  sourceName     String
-  sourceSha256   String
-  importedAt     DateTime      @default(now()) @db.Timestamptz
-  counts         Json
-  rawPayload     Json
-  issues         ImportIssue[]
+  id           String        @id @default(cuid())
+  sourceName   String
+  sourceSha256 String
+  importedAt   DateTime      @default(now()) @db.Timestamptz
+  counts       Json
+  rawPayload   Json
+  issues       ImportIssue[]
 
   @@unique([sourceName, sourceSha256])
 }
 
 model ImportIssue {
-  id         String        @id @default(cuid())
+  id         String   @id @default(cuid())
   importId   String
   severity   String
   code       String
   entityType String
   entityId   String?
   details    Json
-  createdAt  DateTime      @default(now()) @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
 
-  import     FixtureImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  import FixtureImport @relation(fields: [importId], references: [id], onDelete: Cascade)
 }
 
 enum OrganizerAccessStatus {
@@ -486,12 +496,12 @@ model EventJudgeAccess {
   updatedAt       DateTime               @updatedAt @db.Timestamptz
   version         Int                    @default(1)
 
-  event           Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user            User?                  @relation("JudgeUser", fields: [userId], references: [id], onDelete: SetNull)
-  invitedBy       User                   @relation("InvitedByAdmin", fields: [invitedById], references: [id])
-  confirmedBy     User?                  @relation("ConfirmedByAdmin", fields: [confirmedById], references: [id])
-  
-  tracks          EventJudgeAccessTrack[]
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User? @relation("JudgeUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy   User  @relation("InvitedByAdmin", fields: [invitedById], references: [id])
+  confirmedBy User? @relation("ConfirmedByAdmin", fields: [confirmedById], references: [id])
+
+  tracks EventJudgeAccessTrack[]
 
   @@unique([eventId, emailNormalized])
   @@unique([id, eventId])
@@ -503,8 +513,271 @@ model EventJudgeAccessTrack {
   eventId  String
   trackId  String
 
-  access   EventJudgeAccess @relation(fields: [accessId, eventId], references: [id, eventId], onDelete: Cascade)
-  track    Track            @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Cascade)
+  access EventJudgeAccess @relation(fields: [accessId, eventId], references: [id, eventId], onDelete: Cascade)
+  track  Track            @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Cascade)
 
   @@id([accessId, trackId])
+}
+
+enum StageState {
+  DRAFT
+  CONFIGURED
+  ASSIGNING
+  OPEN
+  CLOSED
+  CALCULATING
+  CALCULATED
+  FINALIZED
+}
+
+enum StageScope {
+  EVENT
+  TRACK
+  OVERALL
+}
+
+model JudgingStage {
+  id              String     @id @default(cuid())
+  eventId         String
+  name            String
+  state           StageState @default(DRAFT)
+  method          String     @default("RUBRIC")
+  scope           StageScope @default(EVENT)
+  scopeKey        String
+  trackId         String?
+  requiredReviews Int        @default(1)
+  algorithmVer    String?
+  configHash      String?
+  outputPolicy    Json?
+  startsAt        DateTime?  @db.Timestamptz
+  endsAt          DateTime?  @db.Timestamptz
+  createdAt       DateTime   @default(now()) @db.Timestamptz
+  updatedAt       DateTime   @updatedAt @db.Timestamptz
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  track Track? @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  assignments     RubricAssignment[]
+  rubrics         RubricVersion[]
+  projects        StageProject[]
+  judges          StageJudge[]
+  assignmentRuns  AssignmentRun[]
+  calculationRuns CalculationRun[]
+  auditEvents     AuditEvent[]
+  finalizations   FinalizationSnapshot[]
+
+  @@unique([eventId, name])
+}
+
+model StageProject {
+  id              String   @id @default(cuid())
+  stageId         String
+  projectId       String
+  eventId         String
+  versionSnapshot Int
+  eligibility     String?
+  createdAt       DateTime @default(now()) @db.Timestamptz
+
+  stage   JudgingStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  project Project      @relation(fields: [projectId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([stageId, projectId])
+}
+
+model StageJudge {
+  id          String   @id @default(cuid())
+  stageId     String
+  judgeUserId String
+  isActive    Boolean  @default(true)
+  capacity    Int?
+  eligibility String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  stage JudgingStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  judge User         @relation(fields: [judgeUserId], references: [id], onDelete: Restrict)
+
+  @@unique([stageId, judgeUserId])
+}
+
+model RubricVersion {
+  id          String   @id @default(cuid())
+  stageId     String
+  versionHash String
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  stage    JudgingStage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  criteria RubricCriterion[]
+  reviews  StageReview[]
+}
+
+model RubricCriterion {
+  id              String  @id @default(cuid())
+  rubricVersionId String
+  key             String
+  title           String
+  helpText        String?
+  weightBasisPts  Int
+  maxScore        Int
+  minScore        Int     @default(0)
+  sortOrder       Int
+
+  rubricVersion RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Cascade)
+  scores        StageCriterionScore[]
+
+  @@unique([rubricVersionId, key])
+}
+
+model AssignmentRun {
+  id          String   @id @default(cuid())
+  stageId     String
+  version     Int
+  seed        String?
+  configHash  String
+  inputHash   String
+  actorUserId String?
+  reason      String?
+  diagnostics Json?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  stage       JudgingStage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  assignments RubricAssignment[]
+
+  @@unique([stageId, version])
+}
+
+model RubricAssignment {
+  id          String   @id @default(cuid())
+  stageId     String
+  projectId   String
+  judgeUserId String
+  runId       String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  stage   JudgingStage  @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  judge   User          @relation(fields: [judgeUserId], references: [id], onDelete: Restrict)
+  run     AssignmentRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  reviewDraft ReviewDraft?
+  finalReview StageReview?
+
+  @@unique([stageId, projectId, judgeUserId])
+}
+
+model ReviewDraft {
+  id           String   @id @default(cuid())
+  assignmentId String   @unique
+  judgeUserId  String
+  scores       Json
+  comment      String?
+  revision     Int      @default(1)
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  assignment RubricAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  judge      User             @relation(fields: [judgeUserId], references: [id], onDelete: Restrict)
+}
+
+model StageReview {
+  id              String   @id @default(cuid())
+  assignmentId    String   @unique
+  rubricVersionId String
+  comment         String?
+  submittedAt     DateTime @default(now()) @db.Timestamptz
+
+  assignment    RubricAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  rubricVersion RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  scores        StageCriterionScore[]
+}
+
+model StageCriterionScore {
+  reviewId    String
+  criterionId String
+  value       Int
+
+  review    StageReview     @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  criterion RubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  @@id([reviewId, criterionId])
+}
+
+model CalculationRun {
+  id          String    @id @default(cuid())
+  stageId     String
+  method      String
+  configHash  String
+  inputHash   String
+  implVersion String
+  status      String    @default("PENDING")
+  diagnostics Json?
+  startedAt   DateTime  @default(now()) @db.Timestamptz
+  finishedAt  DateTime? @db.Timestamptz
+
+  stage          JudgingStage           @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  projectResults ProjectResult[]
+  calibrations   JudgeCalibration[]
+  snapshots      FinalizationSnapshot[]
+
+  @@unique([stageId, configHash, inputHash])
+}
+
+model JudgeCalibration {
+  id               String @id @default(cuid())
+  calculationRunId String
+  judgeUserId      String
+  offset           Float
+  reviewCount      Int
+  diagnostics      Json?
+
+  calculationRun CalculationRun @relation(fields: [calculationRunId], references: [id], onDelete: Cascade)
+  judge          User           @relation(fields: [judgeUserId], references: [id], onDelete: Restrict)
+
+  @@unique([calculationRunId, judgeUserId])
+}
+
+model ProjectResult {
+  id               String  @id @default(cuid())
+  calculationRunId String
+  projectId        String
+  reviewCount      Int
+  rawMean          Float
+  normalizedMean   Float
+  displayedMean    Float
+  sd               Float?
+  rank             Int?
+  tieKey           String?
+
+  calculationRun CalculationRun @relation(fields: [calculationRunId], references: [id], onDelete: Cascade)
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([calculationRunId, projectId])
+}
+
+model FinalizationSnapshot {
+  id               String   @id @default(cuid())
+  stageId          String
+  calculationRunId String
+  canonicalHash    String
+  finalizedById    String
+  snapshotData     Json
+  finalizedAt      DateTime @default(now()) @db.Timestamptz
+
+  stage          JudgingStage   @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  calculationRun CalculationRun @relation(fields: [calculationRunId], references: [id], onDelete: Restrict)
+  finalizedBy    User           @relation(fields: [finalizedById], references: [id], onDelete: Restrict)
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  stageId     String?
+  eventId     String?
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  reason      String?
+  metadata    Json
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  stage JudgingStage? @relation(fields: [stageId], references: [id], onDelete: Restrict)
 }

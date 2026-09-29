@@ -272,6 +272,68 @@ async function main() {
               });
           }
       }
+
+      // 10. T2 Demo Event Dataset
+      console.log("Upserting T2 Demo Dataset...");
+      const demoEventRecord = await tx.event.findUnique({ where: { slug: "demo" } });
+      const demoEventId = demoEventRecord!.id;
+      const demoJudgeEmail = "demo_judge@dogfood.local";
+      
+      let demoJudge = await tx.user.findUnique({ where: { email: demoJudgeEmail } });
+      if (!demoJudge) {
+          demoJudge = await tx.user.create({
+              data: {
+                  name: "Demo Judge",
+                  email: demoJudgeEmail,
+                  emailVerified: true
+              }
+          });
+      }
+
+      await tx.team.upsert({
+          where: { id_eventId: { id: "demo_team_1", eventId: demoEventId } },
+          update: {},
+          create: { id: "demo_team_1", eventId: demoEventId, name: "Demo Team", createdById: adminId }
+      });
+      
+      await tx.project.upsert({
+          where: { id_eventId: { id: "demo_proj_1", eventId: demoEventId } },
+          update: {},
+          create: {
+              id: "demo_proj_1", eventId: demoEventId, teamId: "demo_team_1",
+              title: "Demo Project", status: "SUBMITTED", source: "LIVE"
+          }
+      });
+
+      const demoStage = await tx.judgingStage.upsert({
+          where: { eventId_name: { eventId: demoEventId, name: "Demo Round 1" } },
+          update: {},
+          create: { eventId: demoEventId, name: "Demo Round 1", state: "OPEN", scopeKey: demoEventId }
+      });
+
+      // Clear existing demo rubric for idempotency
+      await tx.rubricVersion.deleteMany({ where: { stageId: demoStage.id } });
+      
+      const demoRubric = await tx.rubricVersion.create({
+          data: { stageId: demoStage.id, versionHash: "v1" }
+      });
+      
+      await tx.rubricCriterion.create({
+          data: { rubricVersionId: demoRubric.id, key: "demo_ux", title: "UX", weightBasisPts: 10000, maxScore: 5, sortOrder: 0 }
+      });
+
+      await tx.stageProject.upsert({
+          where: { stageId_projectId: { stageId: demoStage.id, projectId: "demo_proj_1" } },
+          update: {},
+          create: { stageId: demoStage.id, projectId: "demo_proj_1", eventId: demoEventId, versionSnapshot: 1 }
+      });
+
+      await tx.stageJudge.upsert({
+          where: { stageId_judgeUserId: { stageId: demoStage.id, judgeUserId: demoJudge.id } },
+          update: {},
+          create: { stageId: demoStage.id, judgeUserId: demoJudge.id }
+      });
+
   });
 
   console.log("Database seeded successfully.");
