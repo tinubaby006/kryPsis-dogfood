@@ -1,26 +1,93 @@
-# Dogfood 2026 - Krypsis Hackathon Portal
+# DOGFOOD HACKATHON
 
-A complete event management and hackathon portal, upgraded to Prisma v7 and Next.js App Router.
+A self-hosted hackathon platform for managing the complete hackathon lifecycle — from event creation and participant registration to team formation, project submission, and judging.
 
-## Current Status
-- **Stage 6 (Production)** is fully implemented.
-- The application is containerized with Docker and `docker-compose`.
-- PostgreSQL database is initialized and seeded idempotently on container startup.
-- T1 functional constraints are **Verified PASSING**.
-- T2 constraints (Authorization) are explicitly preserved as failing for future work.
+## Features
 
-## Running the Application
-1. **Docker Compose:**
-   Run `docker compose up -d --build`. This starts the PostgreSQL database and the Next.js application. The database is seeded on startup and the app runs on port `3000`.
-   
-2. **Local Development:**
-   Run `npm run dev` to start the development server.
+* Event creation and administration
+* Participant registration and authentication
+* Team creation and invitations
+* Shared team projects
+* Project submission and deadline enforcement
+* Project image uploads
+* Public project gallery
+* Role-based access control
+* Configurable hackathon tracks, prizes, and questions
+* Extensible judging architecture
 
-## Verification
-- **T1 Tests:** Ran `python docs/official/run.py .dogfood.toml`. All T1 tests verify correctly.
-- **Lint/Typecheck:** Executed `npm run typecheck ; npm run lint`. There are 135 known linting/typing issues (primarily `any` types and unused variables) intentionally preserved as technical debt.
-- **T2 Failures:** As instructed, T2 failures related to strict isolation of scores and CSV exports were maintained and documented in `T1_CHECKLIST.md`.
+## Tech Stack
 
-## Known Limitations & Next Steps
-- T2 (Role-based access controls for Judges and Organizers) needs strict implementation.
-- Overhaul TypeScript `any` typings introduced during rapid prototyping.
+* **Next.js** — application framework
+* **TypeScript** — type safety
+* **React** — UI
+* **Tailwind CSS** — styling
+* **SQLite** — local database
+* **Drizzle ORM** — database access
+* **Zod** — validation
+* **Argon2id** — password hashing
+* **Vitest** — unit testing
+* **Playwright** — end-to-end testing
+* **Docker** — local deployment
+
+## Architecture
+
+DOGFOOD follows a simple layered architecture:
+
+```text
+UI
+ ↓
+Routes / API
+ ↓
+Authentication & Authorization
+ ↓
+Business Logic
+ ↓
+Drizzle ORM
+ ↓
+SQLite
+```
+
+The platform is designed as a single coherent application rather than a collection of separate services.
+
+## Local Development
+
+The project is designed to run locally without external runtime dependencies.
+
+```bash
+docker compose up
+```
+
+The local environment includes:
+
+* Application
+* SQLite database
+* Persistent uploaded images
+* Database migrations
+* Seed data
+
+## Project Structure
+
+```text
+app/
+components/
+lib/
+db/
+tests/
+public/
+```
+
+The exact structure may evolve as development progresses.
+
+## Judging
+
+DOGFOOD includes an extensible judging architecture supporting configurable judging stages, judge assignment, scoring, and multi-track judging.
+
+Detailed judging design and mathematics are documented separately in [`JUDGING.md`](JUDGING.md).
+
+## Project Status
+
+DOGFOOD is being developed incrementally, with the core hackathon lifecycle implemented first and advanced judging capabilities built on top of it.
+
+## License
+
+This project is intended to be released under an OSI-approved open-source license.
