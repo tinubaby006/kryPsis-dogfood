@@ -99,6 +99,19 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
         }
     };
 
+    const handleReactivate = async (accessId: string) => {
+        try {
+            const res = await fetch(`/api/events/${eventId}/judge-access/${accessId}/reactivate`, {
+                method: "POST"
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            fetchAccesses();
+        } catch (e: any) {
+            alert(e.message);
+        }
+    };
+
     return (
         <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm mt-8">
             <h2 className="text-xl font-bold mb-6 font-heading border-b border-border pb-3 text-foreground">Judges</h2>
@@ -185,6 +198,9 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
                                 )}
                                 {(a.status === 'INVITED' || a.status === 'EXPIRED') && (
                                     <button onClick={() => handleRenew(a.id)} className="text-xs text-primary font-medium hover:underline">Renew Invite</button>
+                                )}
+                                {a.status === 'REVOKED' && (
+                                    <button onClick={() => handleReactivate(a.id)} className="text-xs text-primary font-medium hover:underline">Reactivate</button>
                                 )}
                                 {a.status !== 'REVOKED' && (
                                     <button onClick={() => handleRevoke(a.id)} className="text-xs text-destructive-text font-medium hover:underline">Revoke</button>

@@ -1,18 +1,20 @@
 # T2 Status
 
 ## Current Stage
-**C1 — migrations, local runtime and historical compatibility**: COMPLETED
+**C2 — T2 Rubric judging logic & backend routes**: COMPLETED
 
 ## Status Summary
-- Audited the Next.js and Prisma repository in C0.
-- Executed C1: Created versioned Prisma migrations (`c1_judging_schema`) adding T2 judging models (`JudgingStage`, `RubricVersion`, `AssignmentRun`, `StageReview`, `ProjectResult`, etc.).
-- Preserved historical fixture reviews (using legacy `Review` model with `source="FIXTURE"`).
-- Added a separate demo dataset under the `demo` event (featuring a complete deterministic rubric and project dataset) to `scripts/seed.ts`.
-- Verified seed idempotency against a secondary `dogfood_test` database successfully.
-- Triggered Compose rebuilding which seamlessly applies `migrate deploy` and `db:seed` using the bundled scripts.
+- **Judging Workspace**: Extended the organizer dashboard (`JudgesSection` and `JudgingStagesSection`) to support full rubric-stage creation and judge provisioning.
+- **Judge Access**: Reused the `EventJudgeAccess` token flow. Offline/copyable URLs are generated without SMTP. Validation guarantees invites only map to the explicitly authorized identity. Activation/Suspension (`/reactivate` & `/revoke`) toggles the explicit `JUDGE` `EventRole`.
+- **Judging Stages**: Configurable `JudgingStage` forms enforce R (required reviews), scopes (Event vs Track), integer basis weight checks (sum strictly 10000), and valid dates (Zod schemas).
+- **State Machine**: Supported transitions locked behind `advanceStageState()` inside transactional updates:
+  - `DRAFT -> CONFIGURED`: Automatic upon valid rubric configuration.
+  - `CONFIGURED -> DRAFT`: Configuration reverts if structural stage properties are modified.
+  - `CONFIGURED -> ASSIGNING -> OPEN`: Implemented transactionally. "Open Judging" explicitly freezes the judge panel (`StageJudge`) and eligible population (`StageProject`) snapshots.
+  - `OPEN -> CLOSED -> CALCULATING -> CALCULATED -> FINALIZED`: Base transitions supported in the state machine core, pending UI logic in future execution phases.
 
 ## Blockers
-- None. C1 is finished and we are ready for C2 (rubric assignment & draft capabilities).
+- None. C2 is finished and we are ready for C3 (Assignment generation).
 
 ## Next Step
-**C2 — T2 Rubric judging logic & backend routes**
+**C3 — T3 Assignment runs**

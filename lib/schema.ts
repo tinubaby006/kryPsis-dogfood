@@ -61,7 +61,55 @@ export const updateCustomQuestionSchema = z.object({
     label: z.string().min(1),
     type: z.enum(["TEXT", "LONG_TEXT", "URL", "NUMBER", "SELECT", "BOOLEAN"]),
     required: z.boolean().default(false),
-    options: z.any().optional(), // Should be string[] for SELECT
+    options: z.any().optional(),
     isPublic: z.boolean().default(false),
     sortOrder: z.coerce.number().default(0),
+});
+
+export const judgingStageSchema = z.object({
+    id: z.string().optional(),
+    name: z.string().min(1, "Stage name is required"),
+    scope: z.enum(["EVENT", "TRACK", "OVERALL"]),
+    trackId: z.string().optional().nullable(),
+    requiredReviews: z.coerce.number().min(1).max(10).default(1),
+    startsAt: z.string().optional().nullable(),
+    endsAt: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+    if (data.startsAt && data.endsAt) {
+        if (new Date(data.startsAt) > new Date(data.endsAt)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "startsAt must be before endsAt",
+                path: ["startsAt"]
+            });
+        }
+    }
+    if (data.scope === "TRACK" && !data.trackId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Track must be selected for TRACK scope",
+            path: ["trackId"]
+        });
+    }
+});
+
+export const rubricCriterionSchema = z.object({
+    id: z.string().optional(),
+    key: z.string().min(1, "Key is required").regex(/^[a-zA-Z0-9_]+$/),
+    title: z.string().min(1, "Title is required"),
+    weightBasisPts: z.coerce.number().min(0).max(10000),
+    maxScore: z.coerce.number().min(1),
+});
+
+export const rubricConfigSchema = z.object({
+    criteria: z.array(rubricCriterionSchema).min(1, "At least one criterion is required")
+}).superRefine((data, ctx) => {
+    const totalWeight = data.criteria.reduce((sum, c) => sum + c.weightBasisPts, 0);
+    if (totalWeight !== 10000) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Weights must sum to 10000 (currently ${totalWeight})`,
+            path: ["criteria"]
+        });
+    }
 });

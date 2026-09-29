@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { AddTrackForm, AddQuestionForm, AddPrizeForm, TrackItem, QuestionItem, PrizeItem, EditEventDetailsForm } from "./OrganizerForms";
 import { JudgesSection } from "./JudgesSection";
+import { JudgingStagesSection } from "./JudgingStagesSection";
 import { Settings, Info, ListChecks, Trophy, ClipboardList } from "lucide-react";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -22,7 +23,13 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
 
     const event = await prisma.event.findUnique({
         where: { id: eventId },
-        include: { tracks: true, prizes: true, customQuestions: true, _count: { select: { projects: true } } }
+        include: { 
+            tracks: true, 
+            prizes: true, 
+            customQuestions: true, 
+            judgingStages: { include: { rubrics: { include: { criteria: true } } } },
+            _count: { select: { projects: true } } 
+        }
     });
 
     if (!event) notFound();
@@ -78,6 +85,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                     </div>
 
                     <JudgesSection eventId={event.id} tracks={event.tracks} />
+                    <JudgingStagesSection eventId={event.id} stages={event.judgingStages} tracks={event.tracks} />
                 </div>
 
                 <div className="space-y-8">
