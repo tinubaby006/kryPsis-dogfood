@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { createOrUpdateJudgingStage, saveRubricConfig, openJudgingStage } from "./judging-actions";
-import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createOrUpdateJudgingStage, saveRubricConfig, startAssignments, getAssignmentPreviewAction, commitAssignmentAction } from "./judging-actions";
+import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle } from "lucide-react";
 
 export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: string, stages: any[], tracks: any[] }) {
     const [isAdding, setIsAdding] = useState(false);
@@ -158,11 +158,94 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
             </div>
 
             <div className="p-4">
-                {isEditing ? (
+                {stage.state === 'ASSIGNING' ? (
+                    <AssignmentPreview eventId={eventId} stage={stage} />
+                ) : isEditing ? (
                     <StageForm eventId={eventId} stage={stage} tracks={tracks} onComplete={() => setIsEditing(false)} />
                 ) : (
                     <RubricManager eventId={eventId} stage={stage} />
                 )}
+            </div>
+        </div>
+    );
+}
+
+function AssignmentPreview({ eventId, stage }: { eventId: string, stage: any }) {
+    const [preview, setPreview] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [committing, setCommitting] = useState(false);
+
+    useEffect(() => {
+        loadPreview();
+    }, []);
+
+    const loadPreview = async () => {
+        setLoading(true);
+        setError("");
+        const res = await getAssignmentPreviewAction(eventId, stage.id);
+        if (res.error) setError(res.error);
+        else setPreview(res.preview);
+        setLoading(false);
+    };
+
+    const handleCommit = async () => {
+        if (!preview || preview.diagnostic.status !== "VALID") return;
+        setCommitting(true);
+        setError("");
+        const res = await commitAssignmentAction(eventId, stage.id, preview.configHash, preview.inputHash);
+        if (res.error) {
+            setError(res.error);
+            setCommitting(false);
+        }
+    };
+
+    if (loading) return <div className="text-sm p-4">Loading preview...</div>;
+    if (error) return <div className="text-sm text-destructive-text p-4 bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>;
+    
+    const isReady = preview?.diagnostic?.status === "VALID";
+
+    return (
+        <div>
+            <h4 className="text-sm font-bold mb-3">Assignment Preview</h4>
+            
+            {!isReady ? (
+                <div className="bg-destructive/10 text-destructive-text border border-destructive/20 p-4 rounded-md mb-4 text-sm font-medium">
+                    <strong>{preview?.diagnostic?.status}:</strong> {preview?.diagnostic?.reason}
+                </div>
+            ) : (
+                <div className="space-y-4 mb-4">
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-muted p-3 rounded-lg border border-border">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Projects</div>
+                            <div className="text-xl font-bold">{preview.stats.N}</div>
+                        </div>
+                        <div className="bg-muted p-3 rounded-lg border border-border">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Judges</div>
+                            <div className="text-xl font-bold">{preview.stats.J}</div>
+                        </div>
+                        <div className="bg-muted p-3 rounded-lg border border-border">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Assignments</div>
+                            <div className="text-xl font-bold">{preview.assignments?.length || 0}</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
+                <button 
+                    onClick={loadPreview} 
+                    className="px-3 py-1.5 text-xs font-medium hover:bg-muted rounded border border-transparent transition-colors"
+                >
+                    Refresh Preview
+                </button>
+                <button 
+                    disabled={!isReady || committing} 
+                    onClick={handleCommit}
+                    className="px-3 py-1.5 text-xs font-medium bg-success text-success-foreground rounded hover:bg-success/90 transition-colors flex items-center gap-1 shadow-sm disabled:opacity-50"
+                >
+                    <CheckCircle className="w-3 h-3" /> {committing ? "Committing..." : "Commit Assignments"}
+                </button>
             </div>
         </div>
     );
@@ -196,10 +279,10 @@ function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
     };
 
     const handleOpen = async () => {
-        if (!confirm("Are you sure? This will freeze the stage configuration and open it for assignments.")) return;
+        if (!confirm("Are you sure? This will freeze the stage configuration and generate an assignment preview.")) return;
         setOpening(true);
         setError("");
-        const res = await openJudgingStage(eventId, stage.id);
+        const res = await startAssignments(eventId, stage.id);
         setOpening(false);
         if (res.error) setError(res.error);
     };

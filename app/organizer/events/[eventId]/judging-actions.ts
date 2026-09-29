@@ -138,18 +138,15 @@ export async function saveRubricConfig(eventId: string, stageId: string, criteri
     }
 }
 
-export async function openJudgingStage(eventId: string, stageId: string) {
+export async function startAssignments(eventId: string, stageId: string) {
     const userId = await requireOrganizer(eventId);
     
     try {
         const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
         if (!stage) return { error: "Stage not found" };
-        if (stage.state !== "CONFIGURED") return { error: "Stage must be CONFIGURED to open" };
+        if (stage.state !== "CONFIGURED") return { error: "Stage must be CONFIGURED to generate assignments" };
 
-        // Transaction: Freeze config, generate assignment run (or just transition state)
         await prisma.$transaction(async (tx) => {
-            // "Once OPEN, freeze rubric/panel/population snapshots."
-            // 1. Snapshot panel
             const eligibleJudges = stage.scope === "TRACK" 
                 ? await tx.judgeTrack.findMany({ where: { eventId, trackId: stage.trackId! } })
                 : await tx.eventRole.findMany({ where: { eventId, role: "JUDGE" } });
@@ -163,7 +160,6 @@ export async function openJudgingStage(eventId: string, stageId: string) {
                 }))
             });
 
-            // 2. Snapshot population
             const projects = stage.scope === "TRACK"
                 ? await tx.project.findMany({ where: { eventId, trackId: stage.trackId!, status: "SUBMITTED" } })
                 : await tx.project.findMany({ where: { eventId, status: "SUBMITTED" } });
@@ -178,12 +174,11 @@ export async function openJudgingStage(eventId: string, stageId: string) {
                 }))
             });
 
-            // State Transitions
-            await tx.judgingStage.update({ where: { id: stageId }, data: { state: "OPEN" } });
+            await tx.judgingStage.update({ where: { id: stageId }, data: { state: "ASSIGNING" } });
             
             await tx.auditEvent.create({
                 data: {
-                    stageId, eventId, actorUserId: userId, action: "STAGE_OPENED",
+                    stageId, eventId, actorUserId: userId, action: "STAGE_ASSIGNING",
                     entityType: "JudgingStage", entityId: stageId,
                     metadata: { judges: eligibleJudges.length, projects: projects.length }
                 }
@@ -192,6 +187,29 @@ export async function openJudgingStage(eventId: string, stageId: string) {
 
         revalidatePath(`/organizer/events/${eventId}`);
         return { success: true };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+import { generateAssignmentPreview, commitAssignmentRun } from "@/lib/judging/assignment";
+
+export async function getAssignmentPreviewAction(eventId: string, stageId: string) {
+    await requireOrganizer(eventId);
+    try {
+        const preview = await generateAssignmentPreview(stageId);
+        return { success: true, preview };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function commitAssignmentAction(eventId: string, stageId: string, configHash: string, inputHash: string) {
+    const userId = await requireOrganizer(eventId);
+    try {
+        const result = await commitAssignmentRun(stageId, userId, configHash, inputHash);
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true, result };
     } catch (e: any) {
         return { error: e.message };
     }
