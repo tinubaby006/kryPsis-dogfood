@@ -302,3 +302,206 @@ export async function commitCalculationAction(eventId: string, stageId: string, 
         return { error: e.message };
     }
 }
+
+export async function getStageProgress(eventId: string, stageId: string) {
+    await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+
+        const assignments = await prisma.rubricAssignment.findMany({
+            where: { stageId },
+            include: { reviewDraft: true, finalReview: true }
+        });
+
+        const judgeStats = new Map();
+        const projectStats = new Map();
+
+        let totalAssigned = 0;
+        let totalSubmitted = 0;
+        let totalDrafts = 0;
+        let totalCancelled = 0;
+
+        for (const asn of assignments) {
+            const status = asn.status === "CANCELLED" ? "CANCELLED" :
+                           asn.finalReview ? "SUBMITTED" :
+                           asn.reviewDraft ? "DRAFT" : "NOT_STARTED";
+
+            if (status === "SUBMITTED") totalSubmitted++;
+            else if (status === "DRAFT") totalDrafts++;
+            else if (status === "CANCELLED") totalCancelled++;
+            totalAssigned++;
+
+            if (!judgeStats.has(asn.judgeUserId)) {
+                judgeStats.set(asn.judgeUserId, { id: asn.judgeUserId, assigned: 0, submitted: 0, draft: 0, cancelled: 0, unavailable: false });
+            }
+            const jStat = judgeStats.get(asn.judgeUserId);
+            jStat.assigned++;
+            if (status === "SUBMITTED") jStat.submitted++;
+            else if (status === "DRAFT") jStat.draft++;
+            else if (status === "CANCELLED") jStat.cancelled++;
+
+            if (!projectStats.has(asn.projectId)) {
+                projectStats.set(asn.projectId, { id: asn.projectId, assigned: 0, submitted: 0, draft: 0, cancelled: 0 });
+            }
+            const pStat = projectStats.get(asn.projectId);
+            pStat.assigned++;
+            if (status === "SUBMITTED") pStat.submitted++;
+            else if (status === "DRAFT") pStat.draft++;
+            else if (status === "CANCELLED") pStat.cancelled++;
+        }
+
+        const stageJudges = await prisma.stageJudge.findMany({ where: { stageId } });
+        for (const sj of stageJudges) {
+            if (!judgeStats.has(sj.judgeUserId)) {
+                judgeStats.set(sj.judgeUserId, { id: sj.judgeUserId, assigned: 0, submitted: 0, draft: 0, cancelled: 0, unavailable: !sj.isActive });
+            } else {
+                judgeStats.get(sj.judgeUserId).unavailable = !sj.isActive;
+            }
+        }
+
+        return {
+            success: true,
+            summary: {
+                totalAssigned,
+                totalSubmitted,
+                totalDrafts,
+                totalCancelled,
+                isHistorical: false
+            },
+            judges: Array.from(judgeStats.values()),
+            projects: Array.from(projectStats.values())
+        };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function publishStageAction(eventId: string, stageId: string) {
+    await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+        if (stage.state !== "FINALIZED") return { error: "Stage must be FINALIZED before publishing" };
+
+        await prisma.judgingStage.update({
+            where: { id: stageId },
+            data: { 
+                outputPolicy: { 
+                    ...(stage.outputPolicy ? (stage.outputPolicy as object) : {}), 
+                    isPublished: true 
+                } 
+            }
+        });
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function repairJudgeDropoutAction(eventId: string, stageId: string, droppedJudgeUserId: string) {
+    const userId = await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+        if (stage.state !== "ASSIGNING" && stage.state !== "OPEN") {
+            return { error: "Stage must be in ASSIGNING or OPEN state to repair dropouts" };
+        }
+
+        // Cancel all unfinished assignments for the dropped judge
+        const unfinished = await prisma.rubricAssignment.findMany({
+            where: { stageId, judgeUserId: droppedJudgeUserId, status: "PENDING" }
+        });
+
+        if (unfinished.length === 0) {
+            return { success: true, message: "No unfinished assignments to reassign" };
+        }
+
+        // Simple greedy reassign: 
+        // 1. Identify distinct replacements (judges not already assigned to the project).
+        // 2. We must preserve R and parity, meaning each cancelled assignment must be re-assigned to exactly one other eligible judge.
+        // For a hackathon-level implementation, we can do a transactional loop over each cancelled assignment.
+        
+        await prisma.$transaction(async (tx) => {
+            for (const asn of unfinished) {
+                // Find eligible judges for this project
+                // Must be active stage judge, not the dropped judge, not already assigned to this project
+                const existingAsns = await tx.rubricAssignment.findMany({
+                    where: { stageId, projectId: asn.projectId }
+                });
+                const assignedJudges = new Set(existingAsns.map(a => a.judgeUserId));
+
+                const eligibleJudges = await tx.stageJudge.findMany({
+                    where: { 
+                        stageId, 
+                        isActive: true,
+                        judgeUserId: {
+                            notIn: Array.from(assignedJudges)
+                        }
+                    }
+                });
+
+                if (eligibleJudges.length === 0) {
+                    throw new Error(`INFEASIBLE: No eligible replacement found for project ${asn.projectId}. Cannot satisfy parity/R.`);
+                }
+
+                // Pick the replacement judge with the fewest current assignments (greedy capacity check)
+                let bestJudge = null;
+                let minLoad = Infinity;
+                for (const j of eligibleJudges) {
+                    const load = await tx.rubricAssignment.count({
+                        where: { stageId, judgeUserId: j.judgeUserId, status: { not: "CANCELLED" } }
+                    });
+                    if (load < minLoad) {
+                        minLoad = load;
+                        bestJudge = j.judgeUserId;
+                    }
+                }
+
+                if (!bestJudge) {
+                    throw new Error(`INFEASIBLE: Unable to assign project ${asn.projectId} safely.`);
+                }
+
+                // Cancel the original
+                await tx.rubricAssignment.update({
+                    where: { id: asn.id },
+                    data: { status: "CANCELLED" }
+                });
+
+                // Create the new assignment
+                const newId = `asn_${crypto.randomBytes(8).toString('hex')}`;
+                await tx.rubricAssignment.create({
+                    data: {
+                        id: newId,
+                        stageId,
+                        projectId: asn.projectId,
+                        judgeUserId: bestJudge,
+                        status: "PENDING",
+                        runId: asn.runId 
+                    }
+                });
+            }
+
+            // Mark the dropped judge as inactive
+            await tx.stageJudge.update({
+                where: { stageId_judgeUserId: { stageId, judgeUserId: droppedJudgeUserId } },
+                data: { isActive: false }
+            });
+            
+            // Audit record
+            await tx.auditEvent.create({
+                data: {
+                    stageId, eventId, actorUserId: userId, action: "DROPOUT_REPAIR",
+                    entityType: "JudgingStage", entityId: stageId,
+                    metadata: { droppedJudge: droppedJudgeUserId, reassignedCount: unfinished.length }
+                }
+            });
+        });
+
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true, reassignedCount: unfinished.length };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
