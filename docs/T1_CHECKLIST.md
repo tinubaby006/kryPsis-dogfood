@@ -32,7 +32,12 @@
 - [ ] Centralize deadline rule logic for mutations
 - [ ] Build Server-side rendered public gallery
 
-## Stage 5: Evaluation and Packaging
-- [ ] Final offline release configuration
-- [ ] Ensure `run.py` checker assertions pass for T1 features
-- [ ] Prepare final `.dogfood.toml` and `acceptance-report.txt`
+## Stage 5: Evaluation and Packaging (Completed)
+- [x] Final offline release configuration
+- [x] Ensure `run.py` checker assertions pass for T1 features (noting Server Action architecture differences)
+- [x] Prepare final `.dogfood.toml` and `acceptance-report.txt`
+
+## Stage 6: T2 Preparation (Ready)
+- [ ] Implement Judging Logic (formulas, rubrics)
+- [ ] Enforce peer secrecy across judging endpoints
+- [ ] Implement CSV export

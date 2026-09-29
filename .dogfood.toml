@@ -1,3 +1,15 @@
-[test]
-bearer = "df_ccb8b2c3467bd2749ded594483e8e44711108ecd553325eb982257ebd470523d"
-endpoint = "http://127.0.0.1:3000"
+[portal]
+base_url = "http://127.0.0.1:3000"
+
+[auth]
+organizer   = "Cookie: better-auth.session_token=dummy_org"
+judge_a     = "Cookie: better-auth.session_token=70dec5d2ffa2f0ea6c413f2104b6da38c71874e5d027198dc1f62ed9809e2966"
+judge_b     = "Cookie: better-auth.session_token=dummy_jdg_b"
+participant = "Cookie: better-auth.session_token=dummy_prt"
+
+[routes]
+gallery      = "/events/evt_01/projects"
+submit       = "/events/evt_01/team/project"
+judge_scores = "/dashboard/judging"
+peer_scores  = "/dashboard/judging?judge=judge_a"
+csv_export   = "/api/export.csv"

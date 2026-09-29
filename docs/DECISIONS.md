@@ -39,3 +39,17 @@ This document tracks intentional technical choices made in fulfilling the hackat
 *   Stage 0 sets up dependencies and architecture purely to support T1.
 *   We explicitly defer T2 (judge assignments, peer-score isolation, and rubric editing) and T3/T4 (public voting, rankings, and API endpoints).
 *   Our focus for the next stages will be login, forms, draft concurrency checks, and public SSR galleries.
+
+## Stage 5 Additions
+
+### Timezone Management
+Users interact with time inputs in their local browser timezone (`datetime-local`). On submission, dates are sent as UTC strings to the server and strictly enforced in Prisma against UTC `now()`. This guarantees global exact deadline behavior while giving users their expected local rendering.
+
+### Organizer Capabilities vs Roles
+We decoupled `canCreateEvents` from event-specific `EventRole` logic. The platform is not a free-for-all; users must request capabilities via `OrganizerAccessRequest` and be explicitly approved by an Admin. Only approved organizers can create new events, but revoking this right does not wipe out their historical management of past events.
+
+### Offline Identity and Invitations
+We refuse to claim emails are sent if there is no SMTP infrastructure. For unverified judges or teams, the system generates secure offline crypto-hashes `tokenHash` that can be copy-pasted directly to users. To mitigate abuse, unverified judge invitations must be re-confirmed by the organizer (`AWAITING_CONFIRMATION`) before they can actively judge an event.
+
+### Strict Dynamic Dashboard Routing
+`/dashboard` intelligently routes users based on their active roles. Admins hit `/admin`, Organizers hit `/organizer`, and Judges hit `/dashboard/judging`, preserving distinct navigation boundaries.
