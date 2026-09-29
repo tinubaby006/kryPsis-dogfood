@@ -1,4 +1,4 @@
-# Dogfood 2026 - Krypsis Hackathon Portal
+# Dogfood 2026 - kryPsis Hackathon Portal
 
 A complete event management and hackathon portal, upgraded to Prisma v7 and Next.js App Router.
 
