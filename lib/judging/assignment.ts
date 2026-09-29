@@ -214,6 +214,13 @@ export async function commitAssignmentRun(stageId: string, actorId: string, conf
             throw new Error("409 CONFLICT: Stale preview. The panel or population has changed. Please preview again.");
         }
 
+        // Get next version
+        const lastRun = await tx.assignmentRun.findFirst({
+            where: { stageId },
+            orderBy: { version: 'desc' }
+        });
+        const nextVersion = lastRun ? lastRun.version + 1 : 1;
+
         // Commit the run
         const runId = `run_${crypto.randomBytes(8).toString('hex')}`;
         const run = await tx.assignmentRun.create({
@@ -222,7 +229,8 @@ export async function commitAssignmentRun(stageId: string, actorId: string, conf
                 stageId,
                 configHash,
                 inputHash,
-                algorithmVersion: "v1_deterministic_greedy"
+                version: nextVersion,
+                actorUserId: actorId
             }
         });
 
