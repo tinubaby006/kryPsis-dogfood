@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { judgingStageSchema, rubricConfigSchema } from "@/lib/schema";
 import { advanceStageState } from "@/lib/judging/state";
 import { revalidatePath } from "next/cache";
+import * as crypto from "crypto";
 
 async function requireOrganizer(eventId: string) {
     const session = await getSession();
@@ -208,6 +209,93 @@ export async function commitAssignmentAction(eventId: string, stageId: string, c
     const userId = await requireOrganizer(eventId);
     try {
         const result = await commitAssignmentRun(stageId, userId, configHash, inputHash);
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true, result };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function closeJudgingStage(eventId: string, stageId: string) {
+    const userId = await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+        if (stage.state !== "OPEN") return { error: "Stage must be OPEN to close" };
+
+        await prisma.judgingStage.update({ where: { id: stageId }, data: { state: "CLOSED" } });
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function finalizeCalculation(eventId: string, stageId: string, calculationRunId: string) {
+    const userId = await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+        if (stage.state !== "CALCULATED") return { error: "Stage must be CALCULATED to finalize" };
+
+        const run = await prisma.calculationRun.findUnique({
+            where: { id: calculationRunId, stageId },
+            include: { projectResults: true }
+        });
+        if (!run) return { error: "Calculation run not found" };
+
+        // "Incomplete stages cannot silently finalize."
+        // We could check if all assignments are completed.
+        const pending = await prisma.rubricAssignment.count({
+            where: { stageId, status: "PENDING" }
+        });
+        if (pending > 0) {
+            return { error: `Cannot finalize: ${pending} assignments are still pending.` };
+        }
+
+        const canonicalHashStr = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0)).map(r => `${r.projectId}:${r.normalizedMean}`).join(",");
+        const canonicalHash = crypto.createHash("sha256").update(canonicalHashStr).digest("hex");
+
+        await prisma.$transaction(async (tx) => {
+            await tx.finalizationSnapshot.create({
+                data: {
+                    stageId,
+                    calculationRunId: run.id,
+                    canonicalHash,
+                    finalizedById: userId,
+                    snapshotData: { runId: run.id, resultsCount: run.projectResults.length }
+                }
+            });
+
+            await tx.judgingStage.update({
+                where: { id: stageId },
+                data: { state: "FINALIZED" }
+            });
+        });
+
+        revalidatePath(`/organizer/events/${eventId}`);
+        return { success: true };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+import { generateCalculationPreview, commitCalculationRun } from "@/lib/judging/calculation";
+
+export async function getCalculationPreviewAction(eventId: string, stageId: string) {
+    await requireOrganizer(eventId);
+    try {
+        const preview = await generateCalculationPreview(stageId);
+        return { success: true, preview };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
+export async function commitCalculationAction(eventId: string, stageId: string, inputHash: string, configHash: string) {
+    await requireOrganizer(eventId);
+    try {
+        const result = await commitCalculationRun(stageId, inputHash, configHash);
         revalidatePath(`/organizer/events/${eventId}`);
         return { success: true, result };
     } catch (e: any) {
