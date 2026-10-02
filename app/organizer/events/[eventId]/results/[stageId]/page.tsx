@@ -4,9 +4,12 @@ import { useState, useEffect } from "react";
 import { getCalculationPreviewAction, commitCalculationAction, publishStageAction } from "../../judging-actions";
 import { Calculator, CheckCircle, AlertTriangle, ShieldCheck, Download, Table, GitCommit, Save, Globe } from "lucide-react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
-export default function OrganizerExplainabilityView({ params }: { params: { eventId: string, stageId: string } }) {
-    const { eventId, stageId } = params;
+export default function OrganizerExplainabilityView() {
+    const params = useParams();
+    const eventId = params.eventId as string;
+    const stageId = params.stageId as string;
     
     const [preview, setPreview] = useState<any>(null);
     const [loading, setLoading] = useState(true);

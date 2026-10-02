@@ -1,17 +1,35 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getStageProgress } from "../../judging-actions";
-import { Activity, CheckCircle2, Circle, AlertCircle, RefreshCw } from "lucide-react";
+import { getStageProgress, closeJudgingStage } from "../../judging-actions";
+import { Activity, CheckCircle2, Circle, AlertCircle, RefreshCw, XCircle } from "lucide-react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 
-export default function OrganizerProgressView({ params }: { params: { eventId: string, stageId: string } }) {
-    const { eventId, stageId } = params;
+export default function OrganizerProgressView() {
+    const params = useParams();
+    const eventId = params.eventId as string;
+    const stageId = params.stageId as string;
     
     const [progress, setProgress] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [closing, setClosing] = useState(false);
     const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+    const router = useRouter();
+
+    const handleCloseStage = async () => {
+        if (!confirm("Are you sure you want to close this judging stage? Judges will no longer be able to submit scores.")) return;
+        setClosing(true);
+        const res = await closeJudgingStage(eventId, stageId);
+        if (res.error) {
+            setError(res.error);
+            setClosing(false);
+        } else {
+            alert("Judging stage closed successfully!");
+            router.push(`/organizer/events/${eventId}`);
+        }
+    };
 
     const loadData = async () => {
         const res = await getStageProgress(eventId, stageId);
@@ -46,11 +64,31 @@ export default function OrganizerProgressView({ params }: { params: { eventId: s
                         <Activity className="w-8 h-8 text-primary" /> Stage Progress Telemetry
                     </h1>
                 </div>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                        <RefreshCw className="w-4 h-4 animate-spin text-primary" /> Live 
-                    </span>
-                    Last updated: {lastUpdate.toLocaleTimeString()}
+                <div className="flex flex-col items-end gap-3">
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                            <RefreshCw className="w-4 h-4 animate-spin text-primary" /> Live 
+                        </span>
+                        Last updated: {lastUpdate.toLocaleTimeString()}
+                    </div>
+                    {progress.stageState === "OPEN" && (
+                        <button 
+                            onClick={handleCloseStage} 
+                            disabled={closing}
+                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <XCircle className="w-4 h-4" />
+                            {closing ? "Closing..." : "Close Judging Stage"}
+                        </button>
+                    )}
+                    {["CLOSED", "CALCULATING", "FINALIZED", "PUBLISHED"].includes(progress.stageState) && (
+                        <Link 
+                            href={`/organizer/events/${eventId}/results/${stageId}`}
+                            className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium text-sm hover:bg-primary-hover transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <Activity className="w-4 h-4" /> View Results & Explainability
+                        </Link>
+                    )}
                 </div>
             </div>
 

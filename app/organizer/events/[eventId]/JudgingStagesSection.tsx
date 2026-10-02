@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createOrUpdateJudgingStage, saveRubricConfig, startAssignments, getAssignmentPreviewAction, commitAssignmentAction } from "./judging-actions";
-import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle, Activity, Calculator } from "lucide-react";
+import { createOrUpdateJudgingStage, saveRubricConfig, startAssignments, getAssignmentPreviewAction, commitAssignmentAction, closeJudgingStage } from "./judging-actions";
+import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle, Activity, Calculator, Download, XCircle, Trophy } from "lucide-react";
 import Link from "next/link";
 
 export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: string, stages: any[], tracks: any[] }) {
@@ -184,7 +184,18 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
                         >
                             <Activity className="w-3 h-3" /> Progress Telemetry
                         </Link>
-                        {["CALCULATING", "FINALIZED", "PUBLISHED"].includes(stage.state) && (
+                        {stage.state === "OPEN" && (
+                            <button
+                                onClick={async () => {
+                                    if (!confirm("Are you sure you want to close this judging stage?")) return;
+                                    await closeJudgingStage(eventId, stage.id);
+                                }}
+                                className="text-xs font-medium bg-destructive text-destructive-foreground px-3 py-1.5 rounded-md hover:bg-destructive/90 transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                <XCircle className="w-3 h-3" /> Close Stage
+                            </button>
+                        )}
+                        {["CLOSED", "CALCULATING", "FINALIZED", "PUBLISHED"].includes(stage.state) && (
                             <Link 
                                 href={`/organizer/events/${eventId}/results/${stage.id}`}
                                 className="text-xs font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors flex items-center gap-1 shadow-sm"
@@ -192,11 +203,28 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
                                 <Calculator className="w-3 h-3" /> Explainability & Results
                             </Link>
                         )}
+                        {["FINALIZED", "PUBLISHED"].includes(stage.state) && (
+                            <Link 
+                                href={`/events/${eventId}/results/${stage.id}`}
+                                target="_blank"
+                                className="text-xs font-bold bg-warning text-warning-foreground px-3 py-1.5 rounded-md hover:bg-warning/90 transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                <Trophy className="w-3 h-3" /> Public Leaderboard
+                            </Link>
+                        )}
                         <a 
-                            href={`/organizer/events/${eventId}/exports`}
+                            href={`/organizer/events/${eventId}/exports?stageId=${stage.id}&type=results`}
                             className="text-xs font-medium text-link hover:underline px-3 py-1.5 flex items-center gap-1"
+                            download
                         >
-                            Go to Exports
+                            <Download className="w-3 h-3" /> Export Results
+                        </a>
+                        <a 
+                            href={`/organizer/events/${eventId}/exports?stageId=${stage.id}&type=raw_reviews`}
+                            className="text-xs font-medium text-link hover:underline px-3 py-1.5 flex items-center gap-1"
+                            download
+                        >
+                            <Download className="w-3 h-3" /> Export Raw Scores
                         </a>
                     </div>
                 )}

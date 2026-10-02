@@ -362,6 +362,7 @@ export async function getStageProgress(eventId: string, stageId: string) {
 
         return {
             success: true,
+            stageState: stage.state,
             summary: {
                 totalAssigned,
                 totalSubmitted,
@@ -378,11 +379,22 @@ export async function getStageProgress(eventId: string, stageId: string) {
 }
 
 export async function publishStageAction(eventId: string, stageId: string) {
-    await requireOrganizer(eventId);
+    const userId = await requireOrganizer(eventId);
     try {
         const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
         if (!stage) return { error: "Stage not found" };
-        if (stage.state !== "FINALIZED") return { error: "Stage must be FINALIZED before publishing" };
+        
+        if (stage.state === "CALCULATED") {
+            const run = await prisma.calculationRun.findFirst({
+                where: { stageId },
+                orderBy: { finishedAt: 'desc' }
+            });
+            if (!run) return { error: "No calculation run found to finalize" };
+            const finRes = await finalizeCalculation(eventId, stageId, run.id);
+            if (finRes.error) return finRes;
+        } else if (stage.state !== "FINALIZED") {
+            return { error: "Stage must be CALCULATED or FINALIZED before publishing" };
+        }
 
         await prisma.judgingStage.update({
             where: { id: stageId },

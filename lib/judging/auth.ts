@@ -9,9 +9,24 @@ export async function requireJudgeAccess(eventId: string, assignmentId?: string)
 
     const userId = session.user.id;
 
+    // Resolve eventId in case a slug was provided
+    const event = await prisma.event.findFirst({
+        where: {
+            OR: [
+                { id: eventId },
+                { slug: eventId }
+            ]
+        }
+    });
+
+    if (!event) {
+        throw new Error("404 NOT FOUND: Event not found");
+    }
+    const resolvedEventId = event.id;
+
     // Is the user actually a JUDGE for this event?
     const eventRole = await prisma.eventRole.findUnique({
-        where: { eventId_userId_role: { eventId, userId, role: "JUDGE" } }
+        where: { eventId_userId_role: { eventId: resolvedEventId, userId, role: "JUDGE" } }
     });
 
     if (!eventRole) {
@@ -52,8 +67,8 @@ export async function requireJudgeAccess(eventId: string, assignmentId?: string)
             throw new Error("403 FORBIDDEN: Judging period has ended");
         }
 
-        return { userId, assignment, stage: assignment.stage };
+        return { userId, resolvedEventId, assignment, stage: assignment.stage };
     }
 
-    return { userId };
+    return { userId, resolvedEventId };
 }

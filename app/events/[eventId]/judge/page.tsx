@@ -17,8 +17,9 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
         );
     }
 
+    let authContext;
     try {
-        await requireJudgeAccess(eventId);
+        authContext = await requireJudgeAccess(eventId);
     } catch (e: any) {
         return (
             <div className="p-8 text-center text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">
@@ -27,12 +28,14 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
         );
     }
 
-    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    const resolvedEventId = authContext.resolvedEventId;
+
+    const event = await prisma.event.findUnique({ where: { id: resolvedEventId } });
     if (!event) notFound();
 
     // Fetch assignments for this judge
     const assignments = await prisma.rubricAssignment.findMany({
-        where: { stage: { eventId }, judgeUserId: session.user.id },
+        where: { stage: { eventId: resolvedEventId }, judgeUserId: session.user.id },
         include: {
             stage: true,
             project: true,
@@ -43,7 +46,7 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
     });
 
     const activeStages = await prisma.judgingStage.findMany({
-        where: { eventId, judges: { some: { judgeUserId: session.user.id, isActive: true } } },
+        where: { eventId: resolvedEventId, judges: { some: { judgeUserId: session.user.id, isActive: true } } },
         orderBy: { name: 'asc' }
     });
 
