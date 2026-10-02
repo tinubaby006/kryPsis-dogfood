@@ -299,7 +299,7 @@ export async function getCalculationPreviewAction(eventId: string, stageId: stri
         const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
         if (!stage) return { error: "Stage not found" };
         const preview = await generateCalculationPreview(stageId);
-        return { success: true, preview };
+        return { success: true, preview, stageState: stage.state };
     } catch (e: any) {
         return { error: e.message };
     }

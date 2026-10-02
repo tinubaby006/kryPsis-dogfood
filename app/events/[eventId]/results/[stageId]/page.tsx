@@ -3,7 +3,7 @@ import { Trophy, ShieldCheck, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export default async function PublicLeaderboard({ params }: { params: Promise<{ eventId: string, stageId: string }> }) {
+export default async function PublicResults({ params }: { params: Promise<{ eventId: string, stageId: string }> }) {
     const { eventId, stageId } = await params;
 
     const stage = await prisma.judgingStage.findUnique({
@@ -43,7 +43,7 @@ export default async function PublicLeaderboard({ params }: { params: Promise<{ 
             <div className="mb-10 text-center">
                 <h1 className="text-4xl font-extrabold text-foreground flex items-center justify-center gap-3 mb-2">
                     <Trophy className="w-10 h-10 text-warning" /> 
-                    {stage.name} Leaderboard
+                    {stage.name} Results
                 </h1>
                 <p className="text-muted-foreground">
                     {stage.event.name} {stage.track && `— ${stage.track.name}`}
@@ -57,7 +57,9 @@ export default async function PublicLeaderboard({ params }: { params: Promise<{ 
                             <tr>
                                 <th className="px-6 py-4">Rank</th>
                                 <th className="px-6 py-4">Project</th>
-                                <th className="px-6 py-4 text-right">Score</th>
+                                {(stage.outputPolicy as any)?.publicScoreVisible && (
+                                    <th className="px-6 py-4 text-right">Score</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -81,25 +83,28 @@ export default async function PublicLeaderboard({ params }: { params: Promise<{ 
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="font-bold text-foreground text-lg">{r.project.name}</div>
+                                        <div className="font-bold text-foreground text-lg">{r.project.title || 'Untitled Project'}</div>
                                         <div className="text-sm text-muted-foreground font-mono">{r.projectId}</div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="inline-flex items-center justify-center bg-primary/10 text-primary font-bold px-4 py-2 rounded-full text-lg border border-primary/20">
-                                            {r.normalizedMean.toFixed(2)}
-                                        </div>
-                                    </td>
+                                    {(stage.outputPolicy as any)?.publicScoreVisible && (
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="inline-flex items-center justify-center bg-primary/10 text-primary font-bold px-4 py-2 rounded-full text-lg border border-primary/20">
+                                                {r.displayedMean.toFixed(2)}
+                                            </div>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             </div>
-            
-            <div className="mt-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-1">
-                <ShieldCheck className="w-3 h-3" />
-                Officially Verified & Calibrated Results
-            </div>
+            {run.method === "WLS" && (
+                <div className="mt-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    Officially Verified & Calibrated Results
+                </div>
+            )}
         </div>
     );
 }

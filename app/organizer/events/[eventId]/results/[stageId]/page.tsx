@@ -28,10 +28,10 @@ export default function OrganizerExplainabilityView() {
         const res = await getCalculationPreviewAction(eventId, stageId);
         if (res.error) setError(res.error);
         else {
-            setPreview(res.preview);
-            if ((res as any).stageState === "FINALIZED") {
-                // We'll check the published state from the fetch below
-            }
+            setPreview({
+                ...res.preview,
+                stageState: (res as any).stageState
+            });
         }
         setLoading(false);
     };
@@ -80,7 +80,7 @@ export default function OrganizerExplainabilityView() {
                     <button onClick={loadData} className="px-4 py-2 border border-border rounded font-medium text-sm bg-card hover:bg-muted focus:ring-2 focus:ring-ring focus:outline-none transition-colors">
                         Recalculate
                     </button>
-                    {isConnected && preview.stageState !== "FINALIZED" && preview.stageState !== "PUBLISHED" && (
+                    {preview.status !== "INCOMPLETE_EVIDENCE" && preview.stageState !== "FINALIZED" && preview.stageState !== "PUBLISHED" && (
                         <button disabled={committing} onClick={handleCommit} className="px-4 py-2 bg-primary text-primary-foreground rounded font-medium text-sm hover:bg-primary-hover focus:ring-2 focus:ring-ring focus:outline-none transition-colors flex items-center gap-2 disabled:opacity-50">
                             <Save className="w-4 h-4" /> {committing ? "Committing..." : "Commit Results"}
                         </button>
@@ -101,19 +101,28 @@ export default function OrganizerExplainabilityView() {
             <div className="grid md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-card p-6 rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow">
                     <h3 className="font-bold text-foreground mb-2">Algorithm Status</h3>
-                    {isConnected ? (
-                        <div className="text-success font-bold flex items-center gap-2 bg-success/10 p-3 rounded border border-success/20">
-                            <CheckCircle className="w-5 h-5" /> CALIBRATED (WLS)
+                    {preview.status === "INCOMPLETE_EVIDENCE" ? (
+                        <div className="text-destructive font-bold flex items-center gap-2 bg-destructive/10 p-3 rounded border border-destructive/20">
+                            <AlertTriangle className="w-5 h-5" /> INCOMPLETE EVIDENCE
+                        </div>
+                    ) : preview.status === "UNSUPPORTED" ? (
+                        <div className="text-warning font-bold flex items-center gap-2 bg-warning/10 p-3 rounded border border-warning/20">
+                            <AlertTriangle className="w-5 h-5" /> UNSUPPORTED (FALLBACK)
                         </div>
                     ) : (
-                        <div className="text-warning font-bold flex items-center gap-2 bg-warning/10 p-3 rounded border border-warning/20">
-                            <AlertTriangle className="w-5 h-5" /> DISCONNECTED FALLBACK
+                        <div className="text-success font-bold flex items-center gap-2 bg-success/10 p-3 rounded border border-success/20">
+                            <CheckCircle className="w-5 h-5" /> VALID (CALIBRATED)
                         </div>
                     )}
+                    <div className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Stage State: <span className="text-foreground">{preview.stageState || "CALCULATING"}</span>
+                    </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                        {isConnected 
-                            ? "Judge overlap graph is fully connected. Bias offsets were successfully calculated and applied."
-                            : "Graph is disconnected. Zero-bias assumed. Cannot calibrate independent components safely."}
+                        {preview.status === "INCOMPLETE_EVIDENCE" 
+                            ? "Not all required reviews (R) are submitted. Judging cannot be finalized safely."
+                            : preview.status === "UNSUPPORTED"
+                            ? "Disconnected multi-judge panel. Falling back to raw mean. Cannot calibrate safely."
+                            : "Judge overlap graph is connected. Bias offsets were successfully calculated."}
                     </p>
                 </div>
                 <div className="bg-card p-6 rounded-xl border border-border shadow-sm col-span-2 hover:shadow-md transition-shadow">

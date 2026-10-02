@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AddTrackForm, AddQuestionForm, AddPrizeForm, TrackItem, QuestionItem, PrizeItem, EditEventDetailsForm } from "./OrganizerForms";
 import { JudgesSection } from "./JudgesSection";
 import { JudgingStagesSection } from "./JudgingStagesSection";
+import { EventReadinessPanel } from "./EventReadinessPanel";
 import { Settings, Info, ListChecks, Trophy, ClipboardList } from "lucide-react";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -27,6 +28,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
             tracks: true, 
             prizes: true, 
             customQuestions: true, 
+            judgeAccesses: true,
             judgingStages: { include: { rubrics: { include: { criteria: true } } } },
             _count: { select: { projects: true } } 
         }
@@ -46,6 +48,8 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                     Back to Events
                 </Link>
             </div>
+
+            <EventReadinessPanel event={event} submissionsExist={submissionsExist} />
 
             <div className="grid md:grid-cols-2 gap-8">
                 <div className="space-y-8">
