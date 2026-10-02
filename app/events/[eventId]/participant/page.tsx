@@ -51,7 +51,7 @@ export default async function TeamDashboardPage({ params }: { params: Promise<{ 
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-8">
                 <h1 className="text-3xl font-bold font-heading text-foreground">{team.name}</h1>
                 <div className="flex gap-3">
-                    <Link href={`/events/${event.id}/team/project`} className="bg-primary text-primary-foreground px-4 py-2.5 rounded-md font-medium hover:bg-primary-hover transition-colors text-sm shadow-sm">Submit / Edit Project</Link>
+                    <Link href={`/events/${event.id}/participant/project`} className="bg-primary text-primary-foreground px-4 py-2.5 rounded-md font-medium hover:bg-primary-hover transition-colors text-sm shadow-sm">Submit / Edit Project</Link>
                     <Link href={`/events/${event.id}`} className="bg-card border border-border text-foreground px-4 py-2.5 rounded-md font-medium hover:bg-muted transition-colors text-sm shadow-sm">Back to Event</Link>
                 </div>
             </div>

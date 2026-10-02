@@ -152,8 +152,8 @@ async function PublicEventView({ event, session }: { event: any, session: any })
                                                 <p className="text-success/80 text-xs">Team: {existingTeam.name}</p>
                                             </div>
                                         </div>
-                                        <Link href={`/events/${event.id}/team`} className="block w-full text-center bg-primary text-primary-foreground px-4 py-3 rounded-md font-medium hover:bg-primary-hover transition-colors shadow-sm">
-                                            Go to Team Workspace
+                                        <Link href={`/events/${event.id}/participant`} className="block w-full text-center bg-primary text-primary-foreground px-4 py-3 rounded-md font-medium hover:bg-primary-hover transition-colors shadow-sm">
+                                            Go to Participant Workspace
                                         </Link>
                                     </div>
                                 ) : isClosed ? (

@@ -56,7 +56,6 @@ export default function NavbarClient({
                         {/* Desktop Nav */}
                         <nav className="hidden md:flex space-x-4">
                             {isAdmin && <Link href="/admin" className="text-muted-foreground hover:text-foreground font-medium transition-colors">Admin</Link>}
-                            {showOrganizerLink && <Link href="/organizer" className="text-muted-foreground hover:text-foreground font-medium transition-colors">Organizer</Link>}
                         </nav>
                     </div>
                     
@@ -88,7 +87,6 @@ export default function NavbarClient({
                 <div className="md:hidden border-t border-border bg-card">
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         {isAdmin && <Link href="/admin" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Admin</Link>}
-                        {showOrganizerLink && <Link href="/organizer" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Organizer</Link>}
                         {user ? (
                             <>
                                 <div className="px-3 py-2 text-sm text-muted-foreground">

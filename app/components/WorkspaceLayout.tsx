@@ -6,8 +6,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     const session = await getSession();
     
     let isAdmin = false;
-    let organizerEventIds: string[] = [];
-    let judgingEventIds: string[] = [];
+    let events: any[] = [];
     
     if (session?.user) {
         const user = await prisma.user.findUnique({
@@ -18,19 +17,25 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
 
         const roles = await prisma.eventRole.findMany({
             where: { userId: session.user.id },
-            select: { eventId: true, role: true }
+            select: { eventId: true, role: true, event: { select: { id: true, name: true, slug: true } } }
         });
         
-        organizerEventIds = roles.filter(r => r.role === "ORGANIZER").map(r => r.eventId);
-        judgingEventIds = roles.filter(r => r.role === "JUDGE").map(r => r.eventId);
+        // Group by event
+        const eventsMap = new Map<string, any>();
+        for (const r of roles) {
+            if (!eventsMap.has(r.eventId)) {
+                eventsMap.set(r.eventId, { ...r.event, roles: [] });
+            }
+            eventsMap.get(r.eventId).roles.push(r.role);
+        }
+        events = Array.from(eventsMap.values());
     }
 
     return (
         <WorkspaceLayoutClient 
             user={session?.user || null}
             isAdmin={isAdmin}
-            organizerEventIds={organizerEventIds}
-            judgingEventIds={judgingEventIds}
+            events={events}
         >
             {children}
         </WorkspaceLayoutClient>
