@@ -28,16 +28,16 @@ ENV NEXT_TELEMETRY_DISABLED 1
 
 # Install tsx globally or locally for seeding? We have it in node_modules from builder.
 # We copy node_modules entirely to ensure Prisma and tsx work seamlessly for scripts/seed.ts
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 # Copy source files needed for runtime/seeding
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/docs ./docs
-COPY --from=builder /app/prisma7.config.ts ./prisma7.config.ts
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/scripts ./scripts
+COPY --from=builder --chown=node:node /app/docs ./docs
+COPY --from=builder --chown=node:node /app/prisma7.config.ts ./prisma7.config.ts
 
 # Ensure uploads directory exists and create dummy .env
 RUN mkdir -p /app/uploads && chown -R node:node /app/uploads && \

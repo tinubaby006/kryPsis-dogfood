@@ -26,30 +26,16 @@ Follow these instructions to set up the platform locally. The application and it
 
 ### Installation & Setup
 
-1. **Clone the repository and install dependencies:**
-   ```bash
-   npm install
-   ```
+We adhere strictly to the "one command runs it" rule.
 
-2. **Start the database:**
-   Use Docker Compose to start the isolated PostgreSQL database in the background:
+1. **Clone the repository and run Docker Compose:**
    ```bash
-   docker compose up -d db
+   docker compose up --build
    ```
+   *This single command will build the Next.js application, start the PostgreSQL database, apply all Prisma migrations, and automatically seed the database with the T2 Demo Dataset and fixture events.*
 
-3. **Reset and seed the database:**
-   Run the following commands to apply migrations, seed the local test database with fixtures, and generate the required offline testing configurations (`.dogfood.toml`):
-   ```bash
-   npx prisma migrate reset --force
-   npm run generate-config
-   ```
-
-4. **Run the development server:**
-   ```bash
-   npm run dev
-   ```
+2. **Access the application:**
    The platform will now be accessible at [http://localhost:3000](http://localhost:3000).
-
 ### 🔑 Test Credentials
 
 Once the database is seeded and the configuration is generated, you can log in using the following test accounts. The password for all accounts is **`dogfoodpassword`**.
