@@ -49,7 +49,7 @@ export default function JudgingDashboard() {
                 <p className="mb-4 text-muted-foreground">Thank you for participating in the events. Your expertise is crucial to evaluating projects fairly and efficiently.</p>
                 <div className="bg-muted/50 p-4 rounded-md text-sm text-foreground/80 flex gap-3 border border-border/50 items-start">
                     <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                    <p><strong>Note:</strong> The actual scoring and rubrics systems are scheduled for a future T2 release. For now, you can view the events you have been assigned to judge.</p>
+                    <p><strong>Note:</strong> The new T2 scoring and rubrics system is now live! Click on an event below to enter your secure judging workbench, where you can evaluate projects and submit scores.</p>
                 </div>
             </div>
 
@@ -84,10 +84,10 @@ export default function JudgingDashboard() {
                             </div>
                             <div className="mt-auto">
                                 <Link 
-                                    href={`/events/${event.slug}`} 
-                                    className="block text-center bg-muted border border-border text-foreground font-medium px-4 py-2.5 rounded-md hover:bg-muted-foreground/20 transition-colors text-sm"
+                                    href={`/events/${event.slug}/judge`} 
+                                    className="block text-center bg-primary border border-primary text-primary-foreground font-medium px-4 py-2.5 rounded-md hover:bg-primary-hover transition-colors text-sm"
                                 >
-                                    View Event Hub
+                                    Enter Judging Workbench
                                 </Link>
                             </div>
                         </div>
