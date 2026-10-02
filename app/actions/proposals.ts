@@ -3,6 +3,7 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { parseLocalInTimezone } from "@/lib/utils";
 
 export async function createProposal(data: {
     name: string;
@@ -32,7 +33,7 @@ export async function createProposal(data: {
                     proposedSlug: data.proposedSlug,
                     description: data.description,
                     timeZone: data.timeZone,
-                    submissionsCloseAt: new Date(data.submissionsCloseAt),
+                    submissionsCloseAt: parseLocalInTimezone(data.submissionsCloseAt, data.timeZone),
                     maxTeamSize: data.maxTeamSize,
                     status: "SUBMITTED",
                     submittedAt: new Date()
@@ -97,7 +98,7 @@ export async function editProposal(proposalId: string, revision: number, data: {
                     proposedSlug: data.proposedSlug,
                     description: data.description,
                     timeZone: data.timeZone,
-                    submissionsCloseAt: new Date(data.submissionsCloseAt),
+                    submissionsCloseAt: parseLocalInTimezone(data.submissionsCloseAt, data.timeZone),
                     maxTeamSize: data.maxTeamSize,
                     status: "SUBMITTED",
                     submittedAt: new Date(),

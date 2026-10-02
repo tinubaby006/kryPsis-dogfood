@@ -144,6 +144,7 @@ model Event {
   submissionsOpenAt  DateTime?  @db.Timestamptz
   submissionsCloseAt DateTime   @db.Timestamptz
   timeZone           String     @default("UTC")
+  tracksMode         String     @default("SINGLE_POOL")
   visibility         Visibility @default(DRAFT)
   maxTeamSize        Int        @default(4)
   createdById        String

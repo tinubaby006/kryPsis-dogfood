@@ -80,11 +80,24 @@ export async function POST(
         if (!email || !email.includes("@")) {
             return NextResponse.json({ error: "Invalid email" }, { status: 422 });
         }
-        if (!Array.isArray(trackIds) || trackIds.length === 0) {
-            return NextResponse.json({ error: "At least one track required" }, { status: 422 });
-        }
-
         const emailNormalized = email.trim().toLowerCase();
+
+        const event = await prisma.event.findUnique({ where: { id: eventId }, include: { tracks: true } });
+        if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+        if (event.tracksMode === "SINGLE_POOL") {
+            if (Array.isArray(trackIds) && trackIds.length > 0) {
+                return NextResponse.json({ error: "SINGLE_POOL events cannot have track selections" }, { status: 422 });
+            }
+        } else {
+            if (!Array.isArray(trackIds) || trackIds.length === 0) {
+                return NextResponse.json({ error: "At least one track required for MULTI_TRACK events" }, { status: 422 });
+            }
+            const validTrackIds = new Set(event.tracks.map(t => t.id));
+            if (!trackIds.every(id => validTrackIds.has(id))) {
+                return NextResponse.json({ error: "Invalid track ID provided" }, { status: 422 });
+            }
+        }
 
         const result = await prisma.$transaction(async (tx) => {
             const existingAccess = await tx.eventJudgeAccess.findUnique({

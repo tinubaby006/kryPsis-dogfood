@@ -4,13 +4,15 @@ import { useState } from "react";
 import { addCustomQuestion, addTrack, addPrize, deleteTrack, deleteCustomQuestion, deletePrize, updateEventDetails } from "@/app/actions/organizer";
 import { QuestionType } from "@prisma/client";
 import { Trash2 } from "lucide-react";
+import { formatUtcToLocal } from "@/lib/utils";
 
 export function EditEventDetailsForm({ event }: { event: any }) {
     const [name, setName] = useState(event.name);
     const [visibility, setVisibility] = useState<"DRAFT" | "PUBLIC">(event.visibility);
     const [maxTeamSize, setMaxTeamSize] = useState(event.maxTeamSize.toString());
+    const [tracksMode, setTracksMode] = useState<"SINGLE_POOL" | "MULTI_TRACK">(event.tracksMode || "SINGLE_POOL");
     const [closesAt, setClosesAt] = useState(
-        event.submissionsCloseAt ? new Date(event.submissionsCloseAt).toISOString().slice(0, 16) : ""
+        event.submissionsCloseAt ? formatUtcToLocal(new Date(event.submissionsCloseAt), event.timeZone || "UTC") : ""
     );
     const [timeZone, setTimeZone] = useState(event.timeZone || "UTC");
     const [loading, setLoading] = useState(false);
@@ -22,8 +24,9 @@ export function EditEventDetailsForm({ event }: { event: any }) {
                 name,
                 visibility,
                 maxTeamSize: parseInt(maxTeamSize, 10) || 4,
-                submissionsCloseAt: closesAt ? new Date(closesAt).toISOString() : new Date().toISOString(),
-                timeZone
+                submissionsCloseAt: closesAt,
+                timeZone,
+                tracksMode
             });
             alert("Event updated successfully!");
         } catch (e: any) {
@@ -41,12 +44,21 @@ export function EditEventDetailsForm({ event }: { event: any }) {
                 <label className={labelClasses}>Event Name</label>
                 <input type="text" className={inputClasses} value={name} onChange={e => setName(e.target.value)} />
             </div>
-            <div>
-                <label className={labelClasses}>Visibility</label>
-                <select className={inputClasses} value={visibility} onChange={e => setVisibility(e.target.value as any)}>
-                    <option value="DRAFT">DRAFT</option>
-                    <option value="PUBLIC">PUBLIC</option>
-                </select>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className={labelClasses}>Visibility</label>
+                    <select className={inputClasses} value={visibility} onChange={e => setVisibility(e.target.value as any)}>
+                        <option value="DRAFT">DRAFT</option>
+                        <option value="PUBLIC">PUBLIC</option>
+                    </select>
+                </div>
+                <div>
+                    <label className={labelClasses}>Tracks Mode</label>
+                    <select className={inputClasses} value={tracksMode} onChange={e => setTracksMode(e.target.value as any)}>
+                        <option value="SINGLE_POOL">Single Pool (No Tracks)</option>
+                        <option value="MULTI_TRACK">Multi Track</option>
+                    </select>
+                </div>
             </div>
             <div>
                 <label className={labelClasses}>Max Team Size</label>

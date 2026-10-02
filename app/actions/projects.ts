@@ -63,8 +63,13 @@ export async function upsertProjectInternal(payload: ProjectPayload, userId: str
     }
 
     // 4. Validate Track & Questions (cross-event bounds)
-    if (trackId && !event.tracks.some(t => t.id === trackId)) {
-        throw new Error("Invalid trackId for this event");
+    if (event.tracksMode === "SINGLE_POOL") {
+        if (trackId) throw new Error("SINGLE_POOL events cannot have track selections");
+    } else {
+        if (!trackId) throw new Error("MULTI_TRACK events require a valid track selection");
+        if (!event.tracks.some(t => t.id === trackId)) {
+            throw new Error("Invalid trackId for this event");
+        }
     }
 
     const eventQuestionIds = new Set(event.customQuestions.map(q => q.id));

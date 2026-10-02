@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Event" ADD COLUMN     "tracksMode" TEXT NOT NULL DEFAULT 'SINGLE_POOL';

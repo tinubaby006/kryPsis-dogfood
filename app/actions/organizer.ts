@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { QuestionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { parseLocalInTimezone } from "@/lib/utils";
 
 async function checkOrganizerAccess(eventId: string, userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -103,10 +104,22 @@ export async function deletePrize(eventId: string, prizeId: string) {
     return { success: true };
 }
 
-export async function updateEventDetails(eventId: string, data: { name: string, visibility: "DRAFT" | "PUBLIC", maxTeamSize: number, submissionsCloseAt: string, timeZone: string }) {
+export async function updateEventDetails(eventId: string, data: { name: string, visibility: "DRAFT" | "PUBLIC", maxTeamSize: number, submissionsCloseAt: string, timeZone: string, tracksMode: "SINGLE_POOL" | "MULTI_TRACK" }) {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) throw new Error("Unauthorized");
     if (!(await checkOrganizerAccess(eventId, session.user.id))) throw new Error("Forbidden");
+
+    const currentEvent = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!currentEvent) throw new Error("Event not found");
+
+    if (currentEvent.tracksMode !== data.tracksMode) {
+        const pCount = await prisma.project.count({ where: { eventId } });
+        const sCount = await prisma.judgingStage.count({ where: { eventId } });
+        const jCount = await prisma.eventJudgeAccess.count({ where: { eventId } });
+        if (pCount > 0 || sCount > 0 || jCount > 0) {
+            throw new Error("Cannot change tracks mode after projects, judges, or judging stages have been created.");
+        }
+    }
 
     await prisma.event.update({
         where: { id: eventId },
@@ -114,8 +127,9 @@ export async function updateEventDetails(eventId: string, data: { name: string, 
             name: data.name,
             visibility: data.visibility,
             maxTeamSize: data.maxTeamSize,
-            submissionsCloseAt: new Date(data.submissionsCloseAt),
-            timeZone: data.timeZone
+            submissionsCloseAt: parseLocalInTimezone(data.submissionsCloseAt, data.timeZone),
+            timeZone: data.timeZone,
+            tracksMode: data.tracksMode
         }
     });
     revalidatePath(`/organizer/events/${eventId}`);

@@ -332,7 +332,7 @@ function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
         e.preventDefault();
         setError("");
         if (totalWeight !== 10000) {
-            setError(`Total weight must be exactly 10000 basis points. Current: ${totalWeight}`);
+            setError(`Total weight must be exactly 100% (currently ${totalWeight / 100}%).`);
             return;
         }
         setSaving(true);
@@ -368,7 +368,7 @@ function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
             <div className="flex justify-between items-center mb-3">
                 <h4 className="text-sm font-bold">Rubric Criteria</h4>
                 <div className={`text-xs font-mono font-medium px-2 py-1 rounded ${totalWeight === 10000 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
-                    Total Weight: {totalWeight} / 10000
+                    Total Weight: {totalWeight / 100}% / 100%
                 </div>
             </div>
 
@@ -384,7 +384,7 @@ function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
                             <input required placeholder="Title (e.g. User Experience)" value={c.title} onChange={e => { const nc = [...criteria]; nc[i].title = e.target.value; setCriteria(nc); }} className="w-full p-1.5 text-xs bg-background border border-border rounded" />
                         </div>
                         <div className="w-24">
-                            <input type="number" required placeholder="Weight (bps)" value={c.weightBasisPts || ''} onChange={e => { const nc = [...criteria]; nc[i].weightBasisPts = parseInt(e.target.value)||0; setCriteria(nc); }} className="w-full p-1.5 text-xs bg-background border border-border rounded" />
+                            <input type="number" step="0.01" required placeholder="Weight (%)" value={c.weightBasisPts !== undefined ? c.weightBasisPts / 100 : ''} onChange={e => { const nc = [...criteria]; nc[i].weightBasisPts = (parseFloat(e.target.value) || 0) * 100; setCriteria(nc); }} className="w-full p-1.5 text-xs bg-background border border-border rounded" />
                         </div>
                         <div className="w-20">
                             <input type="number" required placeholder="Max" min="1" value={c.maxScore || ''} onChange={e => { const nc = [...criteria]; nc[i].maxScore = parseInt(e.target.value)||1; setCriteria(nc); }} className="w-full p-1.5 text-xs bg-background border border-border rounded" />

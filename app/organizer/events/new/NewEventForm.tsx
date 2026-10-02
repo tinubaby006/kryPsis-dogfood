@@ -21,7 +21,7 @@ export function NewEventForm() {
             description: formData.get("description") as string,
             submissionsCloseAt: formData.get("submissionsCloseAt") as string,
             maxTeamSize: parseInt(formData.get("maxTeamSize") as string || "4"),
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+            timeZone: (formData.get("timeZone") as string) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
         };
 
         const res = await createProposal(data);
@@ -56,8 +56,12 @@ export function NewEventForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium text-primary">Submissions Close At *</label>
+                    <label className="block text-sm font-medium text-primary">Submissions Close At (Local Time) *</label>
                     <input required type="datetime-local" name="submissionsCloseAt" className="w-full bg-background border border-primary/50 text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary shadow-[0_0_0_1px_rgba(225,29,72,0.1)]" />
+                </div>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">Timezone (IANA)</label>
+                    <input required type="text" name="timeZone" defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"} placeholder="e.g. UTC, Asia/Kolkata, America/New_York" className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
                 </div>
             </div>
 

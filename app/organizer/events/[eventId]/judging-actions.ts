@@ -29,6 +29,16 @@ export async function createOrUpdateJudgingStage(eventId: string, data: any) {
     const stageData = parsed.data;
 
     try {
+        const event = await prisma.event.findUnique({ where: { id: eventId } });
+        if (!event) return { error: "Event not found" };
+
+        if (event.tracksMode === "SINGLE_POOL" && stageData.scope === "TRACK") {
+            return { error: "SINGLE_POOL events cannot have TRACK scope stages" };
+        }
+        if (stageData.scope === "TRACK" && !stageData.trackId) {
+            return { error: "Track must be selected for TRACK scope" };
+        }
+
         let stage;
         if (stageData.id) {
             stage = await prisma.judgingStage.findUnique({ where: { id: stageData.id } });

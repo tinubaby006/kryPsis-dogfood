@@ -71,7 +71,7 @@ export const judgingStageSchema = z.object({
     name: z.string().min(1, "Stage name is required"),
     scope: z.enum(["EVENT", "TRACK", "OVERALL"]),
     trackId: z.string().optional().nullable(),
-    requiredReviews: z.coerce.number().min(1).max(10).default(1),
+    requiredReviews: z.coerce.number().int("Required reviews must be an integer").min(1).max(10).default(1),
     startsAt: z.string().optional().nullable(),
     endsAt: z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
@@ -97,8 +97,8 @@ export const rubricCriterionSchema = z.object({
     id: z.string().optional(),
     key: z.string().min(1, "Key is required").regex(/^[a-zA-Z0-9_]+$/),
     title: z.string().min(1, "Title is required"),
-    weightBasisPts: z.coerce.number().min(0).max(10000),
-    maxScore: z.coerce.number().min(1),
+    weightBasisPts: z.coerce.number().int("Weights must not have excessive decimal precision").min(0).max(10000),
+    maxScore: z.coerce.number().int("Max score must be an integer").min(1),
 });
 
 export const rubricConfigSchema = z.object({
@@ -108,8 +108,21 @@ export const rubricConfigSchema = z.object({
     if (totalWeight !== 10000) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Weights must sum to 10000 (currently ${totalWeight})`,
+            message: `Weights must sum to exactly 100% (currently ${totalWeight / 100}%)`,
             path: ["criteria"]
         });
+    }
+
+    const keys = new Set<string>();
+    for (let i = 0; i < data.criteria.length; i++) {
+        const c = data.criteria[i];
+        if (keys.has(c.key)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Duplicate criterion key: ${c.key}`,
+                path: ["criteria", i, "key"]
+            });
+        }
+        keys.add(c.key);
     }
 });
