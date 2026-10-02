@@ -149,49 +149,27 @@ export async function saveRubricConfig(eventId: string, stageId: string, criteri
     }
 }
 
-export async function startAssignments(eventId: string, stageId: string) {
+export async function repairStuckStage(eventId: string, stageId: string) {
     const userId = await requireOrganizer(eventId);
     
     try {
         const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
         if (!stage) return { error: "Stage not found" };
-        if (stage.state !== "CONFIGURED") return { error: "Stage must be CONFIGURED to generate assignments" };
+        if (stage.state !== "ASSIGNING") return { error: "Stage must be ASSIGNING to repair" };
+
+        const runCount = await prisma.assignmentRun.count({ where: { stageId } });
+        if (runCount > 0) return { error: "Cannot repair stage with existing assignment runs" };
 
         await prisma.$transaction(async (tx) => {
-            const eligibleJudges = stage.scope === "TRACK" 
-                ? await tx.judgeTrack.findMany({ where: { eventId, trackId: stage.trackId! } })
-                : await tx.eventRole.findMany({ where: { eventId, role: "JUDGE" } });
-            
             await tx.stageJudge.deleteMany({ where: { stageId } });
-            await tx.stageJudge.createMany({
-                data: eligibleJudges.map(j => ({
-                    stageId,
-                    judgeUserId: j.userId,
-                    isActive: true
-                }))
-            });
-
-            const projects = stage.scope === "TRACK"
-                ? await tx.project.findMany({ where: { eventId, trackId: stage.trackId!, status: "SUBMITTED" } })
-                : await tx.project.findMany({ where: { eventId, status: "SUBMITTED" } });
-            
             await tx.stageProject.deleteMany({ where: { stageId } });
-            await tx.stageProject.createMany({
-                data: projects.map(p => ({
-                    stageId,
-                    projectId: p.id,
-                    eventId: p.eventId,
-                    versionSnapshot: p.version
-                }))
-            });
-
-            await tx.judgingStage.update({ where: { id: stageId }, data: { state: "ASSIGNING" } });
+            await tx.judgingStage.update({ where: { id: stageId }, data: { state: "CONFIGURED" } });
             
             await tx.auditEvent.create({
                 data: {
-                    stageId, eventId, actorUserId: userId, action: "STAGE_ASSIGNING",
+                    stageId, eventId, actorUserId: userId, action: "STAGE_REPAIR",
                     entityType: "JudgingStage", entityId: stageId,
-                    metadata: { judges: eligibleJudges.length, projects: projects.length }
+                    metadata: {}
                 }
             });
         });
@@ -454,6 +432,24 @@ export async function repairJudgeDropoutAction(eventId: string, stageId: string,
         // For a hackathon-level implementation, we can do a transactional loop over each cancelled assignment.
         
         await prisma.$transaction(async (tx) => {
+            const lastRun = await tx.assignmentRun.findFirst({
+                where: { stageId },
+                orderBy: { version: 'desc' }
+            });
+            const nextVersion = lastRun ? lastRun.version + 1 : 1;
+            const newRunId = `run_${Math.random().toString(36).substring(7)}`;
+
+            await tx.assignmentRun.create({
+                data: {
+                    id: newRunId,
+                    stageId,
+                    configHash: lastRun?.configHash || "REPAIR",
+                    inputHash: lastRun?.inputHash || "REPAIR",
+                    version: nextVersion,
+                    actorUserId: userId
+                }
+            });
+
             for (const asn of unfinished) {
                 // Find eligible judges for this project
                 // Must be active stage judge, not the dropped judge, not already assigned to this project
@@ -508,7 +504,7 @@ export async function repairJudgeDropoutAction(eventId: string, stageId: string,
                         projectId: asn.projectId,
                         judgeUserId: bestJudge,
                         status: "PENDING",
-                        runId: asn.runId 
+                        runId: newRunId 
                     }
                 });
             }
@@ -523,7 +519,7 @@ export async function repairJudgeDropoutAction(eventId: string, stageId: string,
             await tx.auditEvent.create({
                 data: {
                     stageId, eventId, actorUserId: userId, action: "DROPOUT_REPAIR",
-                    entityType: "JudgingStage", entityId: stageId,
+                    entityType: "AssignmentRun", entityId: newRunId,
                     metadata: { droppedJudge: droppedJudgeUserId, reassignedCount: unfinished.length }
                 }
             });

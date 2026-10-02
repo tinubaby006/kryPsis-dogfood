@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createOrUpdateJudgingStage, saveRubricConfig, startAssignments, getAssignmentPreviewAction, commitAssignmentAction, closeJudgingStage } from "./judging-actions";
-import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle, Activity, Calculator, Download, XCircle, Trophy } from "lucide-react";
+import { createOrUpdateJudgingStage, saveRubricConfig, getAssignmentPreviewAction, commitAssignmentAction, closeJudgingStage } from "./judging-actions";
+import { Gavel, Plus, Save, PlayCircle, Settings2, ShieldCheck, AlertCircle, CheckCircle, Activity, Calculator, Download, XCircle, Trophy, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: string, stages: any[], tracks: any[] }) {
@@ -137,6 +137,7 @@ function StageForm({ eventId, stage, tracks, onComplete }: { eventId: string, st
 
 function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tracks: any[] }) {
     const [isEditing, setIsEditing] = useState(false);
+    const [previewing, setPreviewing] = useState(false);
     const canEdit = ["DRAFT", "CONFIGURED"].includes(stage.state);
     
     return (
@@ -167,12 +168,12 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
             </div>
 
             <div className="p-4">
-                {stage.state === 'ASSIGNING' ? (
-                    <AssignmentPreview eventId={eventId} stage={stage} />
+                {(stage.state === 'ASSIGNING' || previewing) ? (
+                    <AssignmentPreview eventId={eventId} stage={stage} onCancel={() => setPreviewing(false)} />
                 ) : isEditing ? (
                     <StageForm eventId={eventId} stage={stage} tracks={tracks} onComplete={() => setIsEditing(false)} />
                 ) : (
-                    <RubricManager eventId={eventId} stage={stage} />
+                    <RubricManager eventId={eventId} stage={stage} onPreview={() => setPreviewing(true)} />
                 )}
 
                 {/* Workflow Links for active/past stages */}
@@ -226,6 +227,25 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
                         >
                             <Download className="w-3 h-3" /> Export Raw Scores
                         </a>
+                        {stage.state === "ASSIGNING" && (
+                            <button
+                                onClick={async () => {
+                                    if (!confirm("Are you sure you want to attempt repair? This will reset the stage back to CONFIGURED if no reviews exist.")) return;
+                                    const { repairStuckStage } = await import('./judging-actions');
+                                    const res = await repairStuckStage(eventId, stage.id);
+                                    if (res.error) alert(res.error);
+                                }}
+                                className="text-xs font-medium bg-warning text-warning-foreground px-3 py-1.5 rounded-md hover:bg-warning/90 transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                <RefreshCw className="w-3 h-3" /> Repair Stuck Stage
+                            </button>
+                        )}
+                        {/* Example of archiving unused stage (simulate with an action, or just leave as visual UI for now) */}
+                        {["DRAFT", "CONFIGURED"].includes(stage.state) && (
+                            <button className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1.5 rounded-md hover:bg-border transition-colors flex items-center gap-1 shadow-sm">
+                                Archive Unused Stage
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -233,7 +253,7 @@ function StageCard({ eventId, stage, tracks }: { eventId: string, stage: any, tr
     );
 }
 
-function AssignmentPreview({ eventId, stage }: { eventId: string, stage: any }) {
+function AssignmentPreview({ eventId, stage, onCancel }: { eventId: string, stage: any, onCancel?: () => void }) {
     const [preview, setPreview] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -296,11 +316,19 @@ function AssignmentPreview({ eventId, stage }: { eventId: string, stage: any }) 
             )}
             
             <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
+                {onCancel && (
+                    <button 
+                        onClick={onCancel}
+                        className="px-3 py-1.5 text-xs font-medium hover:bg-muted rounded border border-transparent transition-colors"
+                    >
+                        Return to Configuration
+                    </button>
+                )}
                 <button 
                     onClick={loadPreview} 
-                    className="px-3 py-1.5 text-xs font-medium hover:bg-muted rounded border border-transparent transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium hover:bg-muted rounded border border-transparent transition-colors flex items-center gap-1"
                 >
-                    Refresh Preview
+                    <RefreshCw className="w-3 h-3" /> Refresh Preview
                 </button>
                 <button 
                     disabled={!isReady || committing} 
@@ -314,7 +342,7 @@ function AssignmentPreview({ eventId, stage }: { eventId: string, stage: any }) 
     );
 }
 
-function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
+function RubricManager({ eventId, stage, onPreview }: { eventId: string, stage: any, onPreview: () => void }) {
     const activeVersion = stage.rubrics?.[0];
     const initialCriteria = activeVersion?.criteria?.length ? activeVersion.criteria : [{ key: "", title: "", weightBasisPts: 0, maxScore: 5 }];
     
@@ -341,13 +369,8 @@ function RubricManager({ eventId, stage }: { eventId: string, stage: any }) {
         if (res.error) setError(res.error);
     };
 
-    const handleOpen = async () => {
-        if (!confirm("Are you sure? This will freeze the stage configuration and generate an assignment preview.")) return;
-        setOpening(true);
-        setError("");
-        const res = await startAssignments(eventId, stage.id);
-        setOpening(false);
-        if (res.error) setError(res.error);
+    const handleOpen = () => {
+        onPreview();
     };
 
     if (!canEdit) {
