@@ -1,0 +1,1350 @@
+diff --git a/app/api/judge/scores/route.ts b/app/api/judge/scores/route.ts
+index 56ae47f..ffbb60c 100644
+--- a/app/api/judge/scores/route.ts
++++ b/app/api/judge/scores/route.ts
+@@ -1,40 +1,40 @@
+-import { NextResponse } from "next/server";
+-import { getSession } from "@/lib/session";
+-import { prisma } from "@/lib/db";
++import { NextResponse } from 'next/server';
++import { getSession } from '@/lib/session';
++import { prisma } from '@/lib/db';
+ 
+ export async function GET(request: Request) {
+     const url = new URL(request.url);
+-    const judgeUserId = url.searchParams.get("judgeUserId");
+-    const reqHeaders = request.headers;
+-    console.log("Headers:", Object.fromEntries(reqHeaders.entries()));
+     const session = await getSession();
+-    console.log("Session in GET:", session);
+-
+-    if (!session?.user) {
+-        return new NextResponse("Unauthorized", { status: 401 });
+-    }
+-
+-    if (judgeUserId && judgeUserId !== session.user.id) {
+-        return new NextResponse("Forbidden: Cannot view peer scores", { status: 403 });
++    const privateHeaders = { 'Cache-Control': 'private, no-store' };
++    if (!session?.user) return new NextResponse('Unauthorized', { status: 401, headers: privateHeaders });
++    const userId = session.user.id;
++    const targetUserId = url.searchParams.get('judgeUserId');
++    if (targetUserId && targetUserId !== userId) {
++        return new NextResponse('Forbidden: Cannot view peer scores', { status: 403, headers: privateHeaders });
+     }
+-
+-    const hasJudgeRole = await prisma.eventRole.findFirst({
+-        where: { userId: session.user.id, role: "JUDGE" }
++    // Preserve a useful all-my-events view, but scope every query to CURRENT memberships.
++    const eventId = url.searchParams.get('eventId');
++    const roles = await prisma.eventRole.findMany({
++        where: { userId, role: 'JUDGE', ...(eventId ? { eventId } : {}) }, select: { eventId: true }
+     });
+-    const hasStageJudge = await prisma.stageJudge.findFirst({
+-        where: { judgeUserId: session.user.id }
++    const eventIds = roles.map(role => role.eventId);
++    if (!eventIds.length) return new NextResponse('Forbidden', { status: 403, headers: privateHeaders });
++    const activePanel = await prisma.stageJudge.findMany({
++        where: { judgeUserId: userId, isActive: true, stage: { eventId: { in: eventIds } } },
++        select: { stageId: true }
+     });
+-
+-    if (!hasJudgeRole && !hasStageJudge) {
+-        return new NextResponse("Forbidden", { status: 403 });
+-    }
+-
+-    // Genuinely address judge's scores
+-    const targetUserId = judgeUserId || session.user.id;
+     const assignments = await prisma.rubricAssignment.findMany({
+-        where: { judgeUserId: targetUserId },
+-        include: { finalReview: { include: { scores: true } } }
++        where: {
++            judgeUserId: userId, status: { not: 'CANCELLED' },
++            stageId: { in: activePanel.map(panel => panel.stageId) },
++            stage: { eventId: { in: eventIds } }
++        },
++        include: { finalReview: { include: { scores: true } } },
++        orderBy: [{ stageId: 'asc' }, { projectId: 'asc' }]
+     });
+-
+-    return NextResponse.json({ success: true, assignments });
++    const historicalReviews = await prisma.review.findMany({
++        where: { judgeUserId: userId, eventId: { in: eventIds } },
++        include: { scores: true }, orderBy: [{ eventId: 'asc' }, { projectId: 'asc' }]
++    });
++    return NextResponse.json({ success: true, assignments, historicalReviews }, { headers: privateHeaders });
+ }
+diff --git a/app/organizer/events/[eventId]/exports/route.ts b/app/organizer/events/[eventId]/exports/route.ts
+index eee636b..81b68ee 100644
+--- a/app/organizer/events/[eventId]/exports/route.ts
++++ b/app/organizer/events/[eventId]/exports/route.ts
+@@ -31,6 +31,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
+     const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+     if (!role && !adminUser?.isPlatformAdmin) return new NextResponse("Forbidden", { status: 403 });
+ 
++    // Historical evidence has no live judging-stage completion semantics.
++    if (type === "historical_reviews") {
++        const reviews = await prisma.review.findMany({
++            where: { eventId },
++            include: { scores: { include: { criterion: true }, orderBy: { criterionId: "asc" } } },
++            orderBy: [{ projectId: "asc" }, { judgeUserId: "asc" }, { id: "asc" }]
++        });
++        const rows = reviews.flatMap(review => review.scores.map(score => [
++            eventId, review.id, review.projectId, review.judgeUserId,
++            score.criterion.key, score.value.toString(), review.comment, review.source
++        ]));
++        return new NextResponse("\uFEFF" + toCsv([
++            ["Event ID", "Review ID", "Project ID", "Judge User ID", "Criterion", "Score", "Comment", "Source"],
++            ...rows
++        ]), { headers: {
++            "Content-Type": "text/csv; charset=utf-8",
++            "Content-Disposition": 'attachment; filename="historical_reviews.csv"',
++            "Cache-Control": "private, no-store"
++        } });
++    }
++
+     if (!stageId) return new NextResponse("Missing stageId", { status: 400 });
+ 
+     const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+@@ -92,6 +113,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
+     return new NextResponse("\uFEFF" + csvStr, {
+         headers: {
+             "Content-Type": "text/csv; charset=utf-8",
++            "Cache-Control": "private, no-store",
+             "Content-Disposition": `attachment; filename="${filename}"`
+         }
+     });
+diff --git a/package-lock.json b/package-lock.json
+index 3b014a2..4375c80 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -40,6 +40,7 @@
+         "tailwindcss": "^4",
+         "tsx": "^4.23.15",
+         "typescript": "^5",
++        "vite": "^7.3.6",
+         "vitest": "^5.0.2"
+       }
+     },
+@@ -1762,9 +1763,6 @@
+       "cpu": [
+         "arm"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1781,9 +1779,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1800,9 +1795,6 @@
+       "cpu": [
+         "ppc64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1819,9 +1811,6 @@
+       "cpu": [
+         "riscv64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1838,9 +1827,6 @@
+       "cpu": [
+         "s390x"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1857,9 +1843,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1876,9 +1859,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1895,9 +1875,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -1914,9 +1891,6 @@
+       "cpu": [
+         "arm"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -1939,9 +1913,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -1964,9 +1935,6 @@
+       "cpu": [
+         "ppc64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -1989,9 +1957,6 @@
+       "cpu": [
+         "riscv64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -2014,9 +1979,6 @@
+       "cpu": [
+         "s390x"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -2039,9 +2001,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -2064,9 +2023,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -2089,9 +2045,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -2306,6 +2259,23 @@
+       "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
+       "license": "MIT"
+     },
++    "node_modules/@napi-rs/lzma-linux-x64-gnu": {
++      "version": "1.5.1",
++      "resolved": "https://registry.npmjs.org/@napi-rs/lzma-linux-x64-gnu/-/lzma-linux-x64-gnu-1.5.1.tgz",
++      "integrity": "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ],
++      "engines": {
++        "node": "^22.20 || ^24.12 || >=25"
++      }
++    },
+     "node_modules/@napi-rs/wasm-runtime": {
+       "version": "1.2.4",
+       "resolved": "https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-1.2.4.tgz",
+@@ -2416,9 +2386,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -2435,9 +2402,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -2454,9 +2418,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -2473,9 +2434,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -2999,6 +2957,356 @@
+         }
+       }
+     },
++    "node_modules/@rollup/rollup-android-arm-eabi": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.63.6.tgz",
++      "integrity": "sha512-G6xF9OVRWsbHadMfoPNUDwW/Jt70QYG+ZDUvtYCFxjf3SPhqVAO0u9ShXZ7Cf5silVoRWyN4bDjCEKnJkXkw0w==",
++      "cpu": [
++        "arm"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "android"
++      ]
++    },
++    "node_modules/@rollup/rollup-android-arm64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.63.6.tgz",
++      "integrity": "sha512-Us/kTH5e2anr1CQvO8MEq4eeCVcIXI3Ag7OFxDI30n2OW7Q7xWuxo8ItbYq28PG2Sm1NWmZzG9+SqVEaj25SFA==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "android"
++      ]
++    },
++    "node_modules/@rollup/rollup-darwin-arm64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.63.6.tgz",
++      "integrity": "sha512-fwaSNrSHp9PJuEh4bKtd0mYC+G3FeVDjSTmsSiSlIYu7TFCpxrfB6lk7Ao8cIbswFyklPB1ZDUV8LkLBM15VWw==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "darwin"
++      ]
++    },
++    "node_modules/@rollup/rollup-darwin-x64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.63.6.tgz",
++      "integrity": "sha512-QR2tx26gCeGh4eAGnUasfnJuRc+d7Vc0Jo1/fYtKGuiKqCuhbVpbNEvqgYGBwGDZGyS04jj+zdHi9W8uvb1Sdw==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "darwin"
++      ]
++    },
++    "node_modules/@rollup/rollup-freebsd-arm64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.63.6.tgz",
++      "integrity": "sha512-7E1wRJEW8r7WlqmCy58ugndWHrzoEV/pRt2x0D9el7Inra62+Cw00lYW9XhW6iUCtFjhNw49McsSCIzJ/nG8uw==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "freebsd"
++      ]
++    },
++    "node_modules/@rollup/rollup-freebsd-x64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.63.6.tgz",
++      "integrity": "sha512-13KJeF+vDswMzEHmMIouCVcEQdov3CzAA3ZhM8QFmBJV/FZ/VMZI49UHDvPXTK+wokk86kYPmQ9Qb3xGGJbZoQ==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "freebsd"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-arm-gnueabihf": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.63.6.tgz",
++      "integrity": "sha512-hV+W1r8HM84PER4If94QuzrrD0DNk4CxobNhVUiz9ZiiWHDzJss4Jra2AYGH1a7GOTzjS1sIyZ35yYEhw/aq+g==",
++      "cpu": [
++        "arm"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-arm-musleabihf": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.63.6.tgz",
++      "integrity": "sha512-5dWs/GENZufRph8PEfl0TrNH/R3DHJA+VxF/dqlfV2oUZfxRtN3qmFXg2DZj8DYM8d+Vd3dgZtuVmoBE/nb2YQ==",
++      "cpu": [
++        "arm"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-arm64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.63.6.tgz",
++      "integrity": "sha512-inQYLPVIUvYk+s7zpxQldqwrajUNs+t4TJjPGzsdPTvsT8gsQXVcW/sQFolHZ3YSWVk0nMMwU7TtRi0Ow+QMuw==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-arm64-musl": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.63.6.tgz",
++      "integrity": "sha512-sH+0MV1HmDC1q7+bQnlN9ywKBmHqkA2EdD/hHYrrz654ybc+vNC1FRNyzuYKicMQVtZZ4X2jz0osJYmsOtnj4g==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-loong64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.63.6.tgz",
++      "integrity": "sha512-mCECvRr6HGekdBc6dvHzUWubqEti4JyOqlNePrOzl4Wimk26iW5Zy9rld2mQbC9id1NYjfF8nHLFq5fr3CuOKQ==",
++      "cpu": [
++        "loong64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-loong64-musl": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.63.6.tgz",
++      "integrity": "sha512-bb9rdoCPwM4DEsbOP3CJgFnvhSJ3XKCUYyUhxnlSs/XGT0DknpOYgLCPbK8VUzwl+cZGzFQm0KbBYRaSGZC2YQ==",
++      "cpu": [
++        "loong64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-ppc64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.63.6.tgz",
++      "integrity": "sha512-aIJRoGCHev45JSu7JMzVrMzu1NX3nQrXx1Vb/6y4AblxW7JpCMpk4e8C6lHzvSElxi3UEcMdFJldsuWQjV1ddA==",
++      "cpu": [
++        "ppc64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-ppc64-musl": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.63.6.tgz",
++      "integrity": "sha512-LvjnulezHjiaM5Ga9MPCDLTVddjvcrJhZc6vEz9fxeFRGPJsPAX9HuTuPTUQ3l8d+nYpZB/xWzUpuKJlLQm3VQ==",
++      "cpu": [
++        "ppc64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-riscv64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.63.6.tgz",
++      "integrity": "sha512-YmhSBeYZwJ937s8tKpYAhms48N+tj7e+oFkbkVVxfMRdAiynK2AxqRapJXB4utyXxc/iYTkMfPRQ+7ZP0IO78w==",
++      "cpu": [
++        "riscv64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-riscv64-musl": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.63.6.tgz",
++      "integrity": "sha512-9+YukhzqTvJvzfDXJJzkURK9TDY01nofNH3pyHGuucGC4xPvBVtIfCAqJjkjnmBEGJYNXB8sBc2EDt7xDgGenw==",
++      "cpu": [
++        "riscv64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-s390x-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.63.6.tgz",
++      "integrity": "sha512-9G5AtEkpN/A89BILHHEL9aYRYTuFjwa8PUQqoEg8SDrwOZBKpwYqNlQCBNI5QPwGrf7qFlb6LNFilo8FCSA3Wg==",
++      "cpu": [
++        "s390x"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-x64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.63.6.tgz",
++      "integrity": "sha512-Ezx2E5D6Siz805j41x91JiGbzuCm8i2U98U37SQ7ytY737+wsJq+P9nPL6UmqDww491zO7MTivYOTrtmTTeCSw==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-linux-x64-musl": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.63.6.tgz",
++      "integrity": "sha512-8EZ1Q3PB7yUjvR4MbFAnCBF1wF0XRe5QQqbtlJXP7ZX5C8iYlSQJugUhj9oS0gbUP4jp9qGhaIgFnV9Nvod86Q==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "linux"
++      ]
++    },
++    "node_modules/@rollup/rollup-openbsd-x64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.63.6.tgz",
++      "integrity": "sha512-3JI27TALItfZ/qaxXKdbRXfV6WepUoUa3IN07FE+1xxoRdl3JIyrp5PiDF0vOHsPgEiOFkF8s3B3BRymQkdwGA==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "openbsd"
++      ]
++    },
++    "node_modules/@rollup/rollup-openharmony-arm64": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.63.6.tgz",
++      "integrity": "sha512-BNOGeNFNRZDT7Hfc7b9JbTZFXkpAXeXl/CZWtxdd5CNfBaor/0RkJjg+q+E2gwVIvGqqp/NclThKFGrhuScVhw==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "openharmony"
++      ]
++    },
++    "node_modules/@rollup/rollup-win32-arm64-msvc": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.63.6.tgz",
++      "integrity": "sha512-D3eEyLSIim5WF5fHbwnx+ryk0delN7fJyBrDTO3wVCCNBZ/cA8aCGwLS3SiuK+vRI4E7dqikAlStGuR20dBMuw==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "win32"
++      ]
++    },
++    "node_modules/@rollup/rollup-win32-ia32-msvc": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.63.6.tgz",
++      "integrity": "sha512-xwbs9g8zLbHzj1poG1uh27xtubsu27Gk2nuN6kvvGDybjiTfwMksQAnF+phlvI5oeXkJWWDc6kg1t3XpgUYvrg==",
++      "cpu": [
++        "ia32"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "win32"
++      ]
++    },
++    "node_modules/@rollup/rollup-win32-x64-gnu": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.63.6.tgz",
++      "integrity": "sha512-Tr6rhRNnFthvXr45zWVZQ5P8jZ5UwZnXNc7Qnu80cP/VVYtSioOPmvv7wP6UMgRfkBCJr2Pm60ua0YBDSJjgnw==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "win32"
++      ]
++    },
++    "node_modules/@rollup/rollup-win32-x64-msvc": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.63.6.tgz",
++      "integrity": "sha512-0RAxO1pS/6lY1mSoD2Apm+6aPyfUlm+OWKgncIdj/eVN9I+pDY3lKgD7xsUNFei1u7MZQETGOo6m8POXMDp53A==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "win32"
++      ]
++    },
+     "node_modules/@rtsao/scc": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz",
+@@ -3172,9 +3480,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3192,9 +3497,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3212,9 +3514,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3232,9 +3531,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4004,9 +4300,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4021,9 +4314,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4038,9 +4328,6 @@
+         "loong64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4055,9 +4342,6 @@
+         "loong64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4072,9 +4356,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4089,9 +4370,6 @@
+         "riscv64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4106,9 +4384,6 @@
+         "riscv64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4123,9 +4398,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4140,9 +4412,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4157,9 +4426,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -8822,9 +9088,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8846,9 +9109,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8870,9 +9130,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8894,9 +9151,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -10778,6 +11032,52 @@
+       "dev": true,
+       "license": "Unlicense"
+     },
++    "node_modules/rollup": {
++      "version": "4.63.6",
++      "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.63.6.tgz",
++      "integrity": "sha512-w4+GKyTBqshj84F1GF3s2zxAPFZPEmNkCbQtqilsYS7GsksmX6VoV7UggfZg8sUHCCOkBe7UtQp6fZwbH311FQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "1.0.9"
++      },
++      "bin": {
++        "rollup": "dist/bin/rollup"
++      },
++      "engines": {
++        "node": ">=18.0.0",
++        "npm": ">=8.0.0"
++      },
++      "optionalDependencies": {
++        "@napi-rs/lzma-linux-x64-gnu": "1.5.1",
++        "@rollup/rollup-android-arm-eabi": "4.63.6",
++        "@rollup/rollup-android-arm64": "4.63.6",
++        "@rollup/rollup-darwin-arm64": "4.63.6",
++        "@rollup/rollup-darwin-x64": "4.63.6",
++        "@rollup/rollup-freebsd-arm64": "4.63.6",
++        "@rollup/rollup-freebsd-x64": "4.63.6",
++        "@rollup/rollup-linux-arm-gnueabihf": "4.63.6",
++        "@rollup/rollup-linux-arm-musleabihf": "4.63.6",
++        "@rollup/rollup-linux-arm64-gnu": "4.63.6",
++        "@rollup/rollup-linux-arm64-musl": "4.63.6",
++        "@rollup/rollup-linux-loong64-gnu": "4.63.6",
++        "@rollup/rollup-linux-loong64-musl": "4.63.6",
++        "@rollup/rollup-linux-ppc64-gnu": "4.63.6",
++        "@rollup/rollup-linux-ppc64-musl": "4.63.6",
++        "@rollup/rollup-linux-riscv64-gnu": "4.63.6",
++        "@rollup/rollup-linux-riscv64-musl": "4.63.6",
++        "@rollup/rollup-linux-s390x-gnu": "4.63.6",
++        "@rollup/rollup-linux-x64-gnu": "4.63.6",
++        "@rollup/rollup-linux-x64-musl": "4.63.6",
++        "@rollup/rollup-openbsd-x64": "4.63.6",
++        "@rollup/rollup-openharmony-arm64": "4.63.6",
++        "@rollup/rollup-win32-arm64-msvc": "4.63.6",
++        "@rollup/rollup-win32-ia32-msvc": "4.63.6",
++        "@rollup/rollup-win32-x64-gnu": "4.63.6",
++        "@rollup/rollup-win32-x64-msvc": "4.63.6",
++        "fsevents": "~2.3.2"
++      }
++    },
+     "node_modules/rou3": {
+       "version": "0.9.2",
+       "resolved": "https://registry.npmjs.org/rou3/-/rou3-0.9.2.tgz",
+@@ -12294,6 +12594,94 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/vite": {
++      "version": "7.3.6",
++      "resolved": "https://registry.npmjs.org/vite/-/vite-7.3.6.tgz",
++      "integrity": "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "esbuild": "^0.27.0 || ^0.28.0",
++        "fdir": "^6.5.0",
++        "picomatch": "^4.0.3",
++        "postcss": "^8.5.6",
++        "rollup": "^4.43.0",
++        "tinyglobby": "^0.2.15"
++      },
++      "bin": {
++        "vite": "bin/vite.js"
++      },
++      "engines": {
++        "node": "^20.19.0 || >=22.12.0"
++      },
++      "funding": {
++        "url": "https://github.com/vitejs/vite?sponsor=1"
++      },
++      "optionalDependencies": {
++        "fsevents": "~2.3.3"
++      },
++      "peerDependencies": {
++        "@types/node": "^20.19.0 || >=22.12.0",
++        "jiti": ">=1.21.0",
++        "less": "^4.0.0",
++        "lightningcss": "^1.21.0",
++        "sass": "^1.70.0",
++        "sass-embedded": "^1.70.0",
++        "stylus": ">=0.54.8",
++        "sugarss": "^5.0.0",
++        "terser": "^5.16.0",
++        "tsx": "^4.8.1",
++        "yaml": "^2.4.2"
++      },
++      "peerDependenciesMeta": {
++        "@types/node": {
++          "optional": true
++        },
++        "jiti": {
++          "optional": true
++        },
++        "less": {
++          "optional": true
++        },
++        "lightningcss": {
++          "optional": true
++        },
++        "sass": {
++          "optional": true
++        },
++        "sass-embedded": {
++          "optional": true
++        },
++        "stylus": {
++          "optional": true
++        },
++        "sugarss": {
++          "optional": true
++        },
++        "terser": {
++          "optional": true
++        },
++        "tsx": {
++          "optional": true
++        },
++        "yaml": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/vite/node_modules/picomatch": {
++      "version": "4.0.7",
++      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
++      "integrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/jonschlinkert"
++      }
++    },
+     "node_modules/vitest": {
+       "version": "5.0.2",
+       "resolved": "https://registry.npmjs.org/vitest/-/vitest-5.0.2.tgz",
+diff --git a/package.json b/package.json
+index 0a48008..2f8cca9 100644
+--- a/package.json
++++ b/package.json
+@@ -50,6 +50,7 @@
+     "tailwindcss": "^4",
+     "tsx": "^4.23.15",
+     "typescript": "^5",
++    "vite": "^7.3.6",
+     "vitest": "^5.0.2"
+   }
+ }
+diff --git a/scripts/generate-assessment-config.ts b/scripts/generate-assessment-config.ts
+index 13fb54a..9f84a60 100644
+--- a/scripts/generate-assessment-config.ts
++++ b/scripts/generate-assessment-config.ts
+@@ -1,92 +1,104 @@
+ import { PrismaClient } from '@prisma/client';
+ import { PrismaPg } from '@prisma/adapter-pg';
+ import { Pool } from 'pg';
+-import fs from 'fs';
+-import path from 'path';
+-import { auth } from '../lib/auth';
++import fs from 'node:fs';
++import path from 'node:path';
+ 
++// Local setup only: authenticate real users against the RUNNING application.
++// Never delete accounts, rewrite passwords, invent sessions or elevate to admin.
++const base = new URL(process.env.DOGFOOD_BASE_URL || 'http://127.0.0.1:3000');
++if (!['localhost', '127.0.0.1', '[::1]'].includes(base.hostname) ||
++    !['http:', 'https:'].includes(base.protocol) || base.username || base.password) {
++    throw new Error('Assessment setup requires a local HTTP(S) base URL.');
++}
++if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Use the running app database.');
+ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+-const adapter = new PrismaPg(pool);
+-const prisma = new PrismaClient({ adapter });
++const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
++const password = process.env.DOGFOOD_DEMO_PASSWORD || 'dogfood_local_dev';
++const eventId = 'evt_01';
++const origin = base.origin;
++
++async function login(email: string, allowCreate = false) {
++    const existing = await prisma.user.findUnique({ where: { email } });
++    if (!existing && !allowCreate) throw new Error(`Seeded account missing: ${email}. Import fixtures first.`);
++    const endpoint = existing ? 'sign-in/email' : 'sign-up/email';
++    const res = await fetch(`${origin}/api/auth/${endpoint}`, {
++        method: 'POST', redirect: 'manual',
++        headers: { 'Content-Type': 'application/json', Origin: origin },
++        body: JSON.stringify({ email, password, name: 'Local assessment organizer' })
++    });
++    if (!res.ok) throw new Error(`Login failed for ${email}: HTTP ${res.status}. Check the local password, app URL and database. No accounts were deleted.`);
++    const body = await res.json();
++    const cookie = res.headers.getSetCookie()
++        .map(value => value.split(';', 1)[0])
++        .filter(value => value.includes('=') && !value.endsWith('='))
++        .join('; ');
++    if (!body.user?.id || !cookie) throw new Error(`Login returned no user/session cookie for ${email}.`);
++    const local = await prisma.user.findUnique({ where: { email } });
++    if (!local || local.id !== body.user.id) throw new Error('App and setup script appear to use different databases.');
++    if (local.isPlatformAdmin) throw new Error(`Assessment role must not be a platform admin: ${email}`);
++    const verify = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: cookie }, redirect: 'manual' });
++    if (verify.status !== 200 || (await verify.json())?.user?.id !== local.id) {
++        throw new Error(`The running app rejected the freshly issued session for ${email}.`);
++    }
++    return { userId: local.id, cookie };
++}
+ 
+-async function getSessionToken(email: string, role?: 'ORGANIZER'|'JUDGE'|'EVENT_CREATOR', eventId?: string): Promise<{ token: string, userId: string }> {
+-    try {
+-        await prisma.user.delete({ where: { email } }).catch(() => {});
+-        const res = await fetch("http://127.0.0.1:3000/api/auth/sign-up/email", {
+-            method: "POST",
+-            headers: { "Content-Type": "application/json", "Origin": "http://127.0.0.1:3000" },
+-            body: JSON.stringify({ email, password: "dogfoodpassword", name: email })
+-        });
+-        
+-        const json = await res.json();
+-        
+-        if (role === 'ORGANIZER') {
+-            await prisma.user.update({ where: { email }, data: { isPlatformAdmin: true, canCreateEvents: true } });
+-        } else if (role === 'EVENT_CREATOR') {
+-            await prisma.user.update({ where: { email }, data: { isPlatformAdmin: false, canCreateEvents: true } });
+-        } else if (role === 'JUDGE') {
+-            await prisma.eventRole.upsert({
+-                where: { eventId_userId_role: { eventId: "evt_01", userId: json.user.id, role: "JUDGE" } },
+-                create: { eventId: "evt_01", userId: json.user.id, role: "JUDGE" },
+-                update: {}
+-            });
+-        }
+-        
+-        const cookies = res.headers.getSetCookie();
+-        for (const cookie of cookies) {
+-            if (cookie.includes("better-auth.session_token")) {
+-                const match = cookie.match(/better-auth\.session_token=([^;]+)/);
+-                if (match) {
+-                    return { token: match[1], userId: json.user.id };
+-                }
+-            }
+-        }
+-    } catch(e) { console.error(e); }
+-    return { token: "dummy", userId: "dummy" };
++async function expectStatus(route: string, cookie: string, expected: number) {
++    const res = await fetch(origin + route, { headers: { Cookie: cookie }, redirect: 'manual' });
++    if (res.status !== expected) throw new Error(`Preflight ${route}: got ${res.status}, expected ${expected}. Existing config was not replaced.`);
++    return res;
+ }
+ 
+ async function main() {
+-    console.log("Generating official assessment configuration...");
+-    
+-    const org = await getSessionToken('new_org@test.com', 'ORGANIZER');
+-    const creator = await getSessionToken('new_creator@test.com', 'EVENT_CREATOR');
+-    const jdgA = await getSessionToken('new_jdg_a@test.com', 'JUDGE');
+-    const jdgB = await getSessionToken('new_jdg_b@test.com', 'JUDGE');
+-    const prt = await getSessionToken('new_prt@test.com');
++    const fixtures = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'docs/official/fixtures.json'), 'utf8'));
++    const event = await prisma.event.findUnique({ where: { id: eventId } });
++    if (!event) throw new Error('Fixture event evt_01 is missing. Import fixtures first.');
++    if (fixtures.judges.length < 2 || !fixtures.teams[0]?.members[0]) throw new Error('Fixture identities missing.');
++    const claimed = (process.env.DOGFOOD_CLAIMED_TIERS || 'T1').split(',').map(x => x.trim());
++    if (claimed.some(x => !['T1', 'T2'].includes(x))) throw new Error('This setup supports claims T1 or T1,T2.');
+ 
+-    // Create the required stage
+-    await prisma.judgingStage.upsert({
+-        where: { id: "evt01_stage_1" },
+-        create: {
+-            id: "evt01_stage_1",
+-            eventId: "evt_01",
+-            name: "Initial Review",
+-            state: "CONFIGURED",
+-            scopeKey: "GLOBAL"
+-        },
+-        update: {}
++    const judgeA = await login(fixtures.judges[0].email);
++    const judgeB = await login(fixtures.judges[1].email);
++    const participant = await login(fixtures.teams[0].members[0]);
++    for (const [account, role] of [[judgeA, 'JUDGE'], [judgeB, 'JUDGE'], [participant, 'PARTICIPANT']] as const) {
++        const roles = await prisma.eventRole.findMany({ where: { eventId, userId: account.userId } });
++        if (roles.length !== 1 || roles[0].role !== role) throw new Error(`Seeded ${role} account has missing/conflicting event roles.`);
++    }
++    const organizer = await login('assessment_organizer@dogfood.local', true);
++    const orgRoles = await prisma.eventRole.findMany({ where: { eventId, userId: organizer.userId } });
++    if (orgRoles.some(r => r.role !== 'ORGANIZER')) throw new Error('Assessment organizer has a conflicting event role.');
++    await prisma.eventRole.upsert({
++        where: { eventId_userId_role: { eventId, userId: organizer.userId, role: 'ORGANIZER' } },
++        create: { eventId, userId: organizer.userId, role: 'ORGANIZER' }, update: {}
+     });
++    const own = `/api/judge/scores?eventId=${eventId}`;
++    const peer = `${own}&judgeUserId=${encodeURIComponent(judgeA.userId)}`;
++    // Export authentic historical fixture evidence, without creating a pretend stage.
++    const csv = `/organizer/events/${eventId}/exports?type=historical_reviews`;
++    const ownResponse = await expectStatus(own, judgeA.cookie, 200);
++    const ownBody = await ownResponse.json();
++    if (!ownBody.historicalReviews?.length) throw new Error('Judge A historical fixture scores are absent.');
++    await expectStatus(peer, judgeA.cookie, 200);
++    await expectStatus(peer, judgeB.cookie, 403);
++    await expectStatus(own, participant.cookie, 403);
++    const exported = await expectStatus(csv, organizer.cookie, 200);
++    if (!(exported.headers.get('content-type') || '').includes('text/csv') ||
++        !(await exported.text()).split('\n')[0].includes(',')) throw new Error('Export is not genuine CSV.');
++    await expectStatus(csv, judgeA.cookie, 403);
+ 
+-    const tomlContent = `
+-[portal]
+-base_url = "http://127.0.0.1:3000"
+-
+-[auth]
+-organizer   = "Cookie: better-auth.session_token=${org.token}"
+-judge_a     = "Cookie: better-auth.session_token=${jdgA.token}"
+-judge_b     = "Cookie: better-auth.session_token=${jdgB.token}"
+-participant = "Cookie: better-auth.session_token=${prt.token}"
+-
+-[routes]
+-gallery      = "/events/evt_01/projects"
+-submit       = "/api/submit"
+-judge_scores = "/api/judge/scores"
+-peer_scores  = "/api/judge/scores?judgeUserId=${jdgA.userId}"
+-csv_export   = "/organizer/events/evt_01/exports?type=results&stageId=evt01_stage_1"
+-`;
+-
+-    fs.writeFileSync(path.join(process.cwd(), '.dogfood.toml'), tomlContent.trim());
+-    console.log(".dogfood.toml written successfully.");
++    const quote = (value: string) => JSON.stringify(value);
++    const contents = `[portal]\nbase_url = ${quote(origin)}\n\n[tiers]\nclaimed = ${JSON.stringify(claimed)}\npitch = "Local event-scoped judging and evidence exports."\n\n[auth]\norganizer = ${quote('Cookie: ' + organizer.cookie)}\njudge_a = ${quote('Cookie: ' + judgeA.cookie)}\njudge_b = ${quote('Cookie: ' + judgeB.cookie)}\nparticipant = ${quote('Cookie: ' + participant.cookie)}\n\n[routes]\ngallery = "/events/evt_01/projects"\nsubmit = "/api/submit"\njudge_scores = ${quote(own)}\npeer_scores = ${quote(peer)}\ncsv_export = ${quote(csv)}\n`;
++    const target = path.join(process.cwd(), '.dogfood.toml');
++    const temporary = `${target}.tmp`;
++    fs.writeFileSync(temporary, contents, { mode: 0o600 });
++    fs.renameSync(temporary, target);
++    console.log('Fresh local sessions verified. .dogfood.toml written; no tokens printed.');
++    console.log('Run: python docs/official/run.py .dogfood.toml');
++    console.log('Sessions expire; regenerate after database/secret changes. T1 is the default claim.');
+ }
+ 
+-main().finally(async () => await prisma.$disconnect());
++main().catch(error => {
++    console.error(error instanceof Error ? error.message : 'Assessment setup failed');
++    process.exitCode = 1;
++}).finally(async () => { await prisma.$disconnect(); await pool.end(); });
+diff --git a/vitest.config.ts b/vitest.config.ts
+new file mode 100644
+index 0000000..03e36ec
+--- /dev/null
++++ b/vitest.config.ts
+@@ -0,0 +1,6 @@
++import { defineConfig } from 'vitest/config';
++import path from 'node:path';
++export default defineConfig({
++    resolve: { alias: { '@': path.resolve(__dirname) } },
++    test: { environment: 'node', include: ['tests/**/*.test.ts'] }
++});
+diff --git a/tests/acceptance-routes.test.ts b/tests/acceptance-routes.test.ts
+new file mode 100644
+index 0000000..0d77b6a
+--- /dev/null
++++ b/tests/acceptance-routes.test.ts
+@@ -0,0 +1,97 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++const mocks = vi.hoisted(() => ({
++    getSession: vi.fn(),
++    prisma: {
++        eventRole: { findMany: vi.fn(), findFirst: vi.fn() },
++        stageJudge: { findMany: vi.fn() },
++        rubricAssignment: { findMany: vi.fn() },
++        review: { findMany: vi.fn() },
++        user: { findUnique: vi.fn() },
++        judgingStage: { findUnique: vi.fn() }
++    }
++}));
++vi.mock('@/lib/session', () => ({ getSession: mocks.getSession }));
++vi.mock('@/lib/db', () => ({ prisma: mocks.prisma }));
++import { GET as scores } from '@/app/api/judge/scores/route';
++import { GET as csv } from '@/app/organizer/events/[eventId]/exports/route';
++const request = (path: string) => new Request('http://localhost:3000' + path);
++const params = { params: Promise.resolve({ eventId: 'evt_01' }) };
++beforeEach(() => {
++    vi.resetAllMocks();
++    mocks.getSession.mockResolvedValue({ user: { id: 'judge-a' } });
++    mocks.prisma.eventRole.findMany.mockResolvedValue([{ eventId: 'evt_01' }]);
++    mocks.prisma.stageJudge.findMany.mockResolvedValue([{ stageId: 'stage-1' }]);
++    mocks.prisma.rubricAssignment.findMany.mockResolvedValue([]);
++    mocks.prisma.review.findMany.mockResolvedValue([]);
++    mocks.prisma.user.findUnique.mockResolvedValue({ isPlatformAdmin: false });
++});
++describe('judge score authorization', () => {
++    it('rejects unauthenticated requests before reading scores', async () => {
++        mocks.getSession.mockResolvedValue(null);
++        expect((await scores(request('/api/judge/scores'))).status).toBe(401);
++        expect(mocks.prisma.review.findMany).not.toHaveBeenCalled();
++    });
++    it('returns real own historical evidence scoped to the requested membership', async () => {
++        mocks.prisma.review.findMany.mockResolvedValue([{ id: 'review-own', scores: [{ value: 4 }] }]);
++        const res = await scores(request('/api/judge/scores?eventId=evt_01&judgeUserId=judge-a'));
++        expect(res.status).toBe(200);
++        expect((await res.json()).historicalReviews[0].id).toBe('review-own');
++        expect(res.headers.get('cache-control')).toContain('no-store');
++        expect(mocks.prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({
++            where: { judgeUserId: 'judge-a', eventId: { in: ['evt_01'] } }
++        }));
++    });
++    it('blocks a valid judge attempting a peer score resource', async () => {
++        expect((await scores(request('/api/judge/scores?judgeUserId=judge-b'))).status).toBe(403);
++        expect(mocks.prisma.review.findMany).not.toHaveBeenCalled();
++    });
++    it('blocks a participant with no judge membership', async () => {
++        mocks.prisma.eventRole.findMany.mockResolvedValue([]);
++        expect((await scores(request('/api/judge/scores?eventId=evt_01'))).status).toBe(403);
++    });
++    it('cannot substitute a judge membership in a different event', async () => {
++        mocks.prisma.eventRole.findMany.mockResolvedValue([]);
++        expect((await scores(request('/api/judge/scores?eventId=other'))).status).toBe(403);
++        expect(mocks.prisma.eventRole.findMany).toHaveBeenCalledWith(expect.objectContaining({
++            where: { userId: 'judge-a', role: 'JUDGE', eventId: 'other' }
++        }));
++    });
++    it('restricts new assignments to active stage panels and excludes cancellations', async () => {
++        await scores(request('/api/judge/scores?eventId=evt_01'));
++        expect(mocks.prisma.rubricAssignment.findMany).toHaveBeenCalledWith(expect.objectContaining({
++            where: expect.objectContaining({ judgeUserId: 'judge-a', stageId: { in: ['stage-1'] }, status: { not: 'CANCELLED' } })
++        }));
++    });
++});
++describe('organizer historical CSV', () => {
++    it('requires authentication', async () => {
++        mocks.getSession.mockResolvedValue(null);
++        expect((await csv(request('/exports?type=historical_reviews'), params)).status).toBe(401);
++    });
++    it('denies a judge even when logged in', async () => {
++        mocks.prisma.eventRole.findFirst.mockResolvedValue(null);
++        expect((await csv(request('/exports?type=historical_reviews'), params)).status).toBe(403);
++        expect(mocks.prisma.review.findMany).not.toHaveBeenCalled();
++    });
++    it('exports real criterion evidence as a non-admin event organizer without a fake stage', async () => {
++        mocks.prisma.eventRole.findFirst.mockResolvedValue({ role: 'ORGANIZER' });
++        mocks.prisma.review.findMany.mockResolvedValue([{
++            id: 'r1', projectId: 'p1', judgeUserId: 'j1', source: 'FIXTURE',
++            comment: '=formula,"quote"\nnext',
++            scores: [{ criterion: { key: 'quality' }, value: 4 }]
++        }]);
++        const res = await csv(request('/exports?type=historical_reviews'), params);
++        const body = await res.text();
++        expect(res.status).toBe(200);
++        expect(res.headers.get('content-type')).toContain('text/csv');
++        expect(res.headers.get('cache-control')).toContain('no-store');
++        expect(body).toContain('"quality","4"');
++        expect(body).toContain('"\'=formula,""quote""\nnext"');
++        expect(mocks.prisma.judgingStage.findUnique).not.toHaveBeenCalled();
++        expect(mocks.prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { eventId: 'evt_01' } }));
++    });
++    it('keeps stageId mandatory for ordinary stage exports', async () => {
++        mocks.prisma.eventRole.findFirst.mockResolvedValue({ role: 'ORGANIZER' });
++        expect((await csv(request('/exports?type=results'), params)).status).toBe(400);
++    });
++});
