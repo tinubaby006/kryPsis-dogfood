@@ -45,7 +45,7 @@ RUN mkdir -p /app/uploads && chown -R node:node /app/uploads && \
 
 # Create a startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'echo "DATABASE_URL is: $DATABASE_URL"' >> /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
     echo 'echo "Waiting for database to be ready..."' >> /app/start.sh && \
     echo 'npx prisma migrate deploy' >> /app/start.sh && \
     echo 'npm run db:seed' >> /app/start.sh && \

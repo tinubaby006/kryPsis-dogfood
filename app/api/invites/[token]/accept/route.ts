@@ -71,6 +71,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 throw new Error("ALREADY_IN_TEAM");
             }
 
+            // Check conflicts
+            const existingRole = await tx.eventRole.findUnique({
+                where: { eventId_userId: { eventId: team.eventId, userId: session.user.id } }
+            });
+            
+            if (existingRole && existingRole.role !== "PARTICIPANT") {
+                throw new Error(`CONFLICT: User has conflicting role: ${existingRole.role}`);
+            }
+
             // Increment invite uses
             await tx.$executeRaw`
                 UPDATE "TeamInvite"
@@ -90,8 +99,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
             // Assign PARTICIPANT role if not already
             await tx.eventRole.upsert({
-                where: { eventId_userId_role: { eventId: team.eventId, userId: session.user.id, role: "PARTICIPANT" } },
-                update: {},
+                where: { eventId_userId: { eventId: team.eventId, userId: session.user.id } },
+                update: { role: "PARTICIPANT" },
                 create: { eventId: team.eventId, userId: session.user.id, role: "PARTICIPANT" }
             });
 

@@ -53,14 +53,11 @@ export async function POST(
             });
 
             // Upsert event role
-            const existingRole = await tx.eventRole.findUnique({
-                where: { eventId_userId_role: { eventId, userId: access.userId, role: "JUDGE" } }
+            await tx.eventRole.upsert({
+                where: { eventId_userId: { eventId, userId: access.userId } },
+                update: { role: "JUDGE" },
+                create: { eventId, userId: access.userId, role: "JUDGE" }
             });
-            if (!existingRole) {
-                await tx.eventRole.create({
-                    data: { eventId, userId: access.userId, role: "JUDGE" }
-                });
-            }
 
             // Sync tracks
             await tx.judgeTrack.deleteMany({ where: { eventId, userId: access.userId } });

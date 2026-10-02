@@ -33,6 +33,8 @@ model User {
   uploadedAssets        ProjectAsset[]
   organizerRequests     OrganizerAccessRequest[]
   reviewedRequests      OrganizerAccessRequest[] @relation("ReviewerAdmin")
+  proposals             EventProposal[]          @relation("ProposedEvents")
+  reviewedProposals     EventProposal[]          @relation("ReviewedProposals")
 
   judgeAccesses          EventJudgeAccess[]     @relation("JudgeUser")
   invitedJudgeAccesses   EventJudgeAccess[]     @relation("InvitedByAdmin")
@@ -112,7 +114,7 @@ model EventRole {
   event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, userId, role])
+  @@unique([eventId, userId])
 }
 
 model AssessmentCredential {
@@ -160,6 +162,7 @@ model Event {
   reviews         Review[]
   judgeAccesses   EventJudgeAccess[]
   judgingStages   JudgingStage[]
+  proposal        EventProposal?
 }
 
 model Track {
@@ -469,6 +472,44 @@ model OrganizerAccessRequest {
 
   @@index([status, createdAt])
   @@index([applicantUserId, createdAt])
+}
+
+enum EventProposalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+model EventProposal {
+  id                 String              @id @default(cuid())
+  applicantUserId    String
+  name               String
+  proposedSlug       String
+  description        String              @default("")
+  timeZone           String              @default("UTC")
+  tracksMode         String              @default("SINGLE_POOL")
+  startsAt           DateTime?           @db.Timestamptz
+  endsAt             DateTime?           @db.Timestamptz
+  submissionsOpenAt  DateTime?           @db.Timestamptz
+  submissionsCloseAt DateTime            @db.Timestamptz
+  maxTeamSize        Int                 @default(4)
+  status             EventProposalStatus @default(DRAFT)
+  revision           Int                 @default(1)
+  
+  submittedAt        DateTime?           @db.Timestamptz
+  reviewedAt         DateTime?           @db.Timestamptz
+  reviewedById       String?
+  decisionReason     String?             @db.Text
+  approvedEventId    String?             @unique
+
+  createdAt          DateTime            @default(now()) @db.Timestamptz
+  updatedAt          DateTime            @updatedAt @db.Timestamptz
+
+  applicant          User                @relation("ProposedEvents", fields: [applicantUserId], references: [id], onDelete: Cascade)
+  reviewer           User?               @relation("ReviewedProposals", fields: [reviewedById], references: [id])
+  approvedEvent      Event?              @relation(fields: [approvedEventId], references: [id])
 }
 
 enum EventJudgeAccessStatus {

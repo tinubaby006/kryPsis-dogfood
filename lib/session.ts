@@ -30,10 +30,9 @@ export async function requirePlatformAdmin() {
 export async function getUserEventRole(eventId: string, userId: string) {
   const roleRecord = await prisma.eventRole.findUnique({
     where: {
-      eventId_userId_role: {
+      eventId_userId: {
         eventId,
-        userId,
-        role: "ORGANIZER" // We could fetch all roles for this user and event
+        userId
       }
     }
   });

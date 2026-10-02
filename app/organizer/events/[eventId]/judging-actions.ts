@@ -198,6 +198,8 @@ import { generateAssignmentPreview, commitAssignmentRun } from "@/lib/judging/as
 export async function getAssignmentPreviewAction(eventId: string, stageId: string) {
     await requireOrganizer(eventId);
     try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
         const preview = await generateAssignmentPreview(stageId);
         return { success: true, preview };
     } catch (e: any) {
@@ -208,6 +210,8 @@ export async function getAssignmentPreviewAction(eventId: string, stageId: strin
 export async function commitAssignmentAction(eventId: string, stageId: string, configHash: string, inputHash: string) {
     const userId = await requireOrganizer(eventId);
     try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
         const result = await commitAssignmentRun(stageId, userId, configHash, inputHash);
         revalidatePath(`/organizer/events/${eventId}`);
         return { success: true, result };
@@ -285,6 +289,8 @@ import { generateCalculationPreview, commitCalculationRun } from "@/lib/judging/
 export async function getCalculationPreviewAction(eventId: string, stageId: string) {
     await requireOrganizer(eventId);
     try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
         const preview = await generateCalculationPreview(stageId);
         return { success: true, preview };
     } catch (e: any) {
@@ -295,6 +301,8 @@ export async function getCalculationPreviewAction(eventId: string, stageId: stri
 export async function commitCalculationAction(eventId: string, stageId: string, inputHash: string, configHash: string) {
     await requireOrganizer(eventId);
     try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
         const result = await commitCalculationRun(stageId, inputHash, configHash);
         revalidatePath(`/organizer/events/${eventId}`);
         return { success: true, result };

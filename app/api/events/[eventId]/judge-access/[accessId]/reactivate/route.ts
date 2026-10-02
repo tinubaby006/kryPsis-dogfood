@@ -43,10 +43,18 @@ export async function POST(
                 }
             });
 
+            // Check for conflict
+            const existingRole = await tx.eventRole.findUnique({
+                where: { eventId_userId: { eventId, userId: access.userId } }
+            });
+            if (existingRole && existingRole.role !== "JUDGE") {
+                throw new Error(`422 UNPROCESSABLE: Cannot reactivate judge access because user already has role ${existingRole.role}`);
+            }
+
             // Restore roles
             await tx.eventRole.upsert({
-                where: { eventId_userId_role: { eventId, userId: access.userId, role: "JUDGE" } },
-                update: {},
+                where: { eventId_userId: { eventId, userId: access.userId } },
+                update: { role: "JUDGE" },
                 create: { eventId, userId: access.userId, role: "JUDGE" }
             });
 

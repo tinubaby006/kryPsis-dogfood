@@ -14,10 +14,10 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
     const { eventId } = await params;
     
     const isOrg = await prisma.eventRole.findUnique({
-        where: { eventId_userId_role: { eventId, userId: session.user.id, role: "ORGANIZER" } }
+        where: { eventId_userId: { eventId, userId: session.user.id } }
     });
 
-    if (!isOrg) {
+    if (!isOrg || isOrg.role !== "ORGANIZER") {
         return <div className="p-10 text-destructive-text font-medium bg-destructive/10 border border-destructive/20 rounded-md">Access Denied. You are not an organizer for this event.</div>;
     }
 

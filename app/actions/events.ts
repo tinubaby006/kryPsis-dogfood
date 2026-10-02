@@ -6,55 +6,6 @@ import { createEventSchema, updateTrackSchema, updatePrizeSchema, updateCustomQu
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-export async function createEvent(formData: z.infer<typeof createEventSchema>) {
-    const session = await getSession();
-    if (!session?.user) return { error: "Unauthorized" };
-
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-    if (!user?.canCreateEvents) return { error: "Forbidden: You do not have permission to create events" };
-
-    const parsed = createEventSchema.safeParse(formData);
-    if (!parsed.success) return { error: "Invalid data", details: parsed.error.format() };
-
-    const data = parsed.data;
-
-    try {
-        const event = await prisma.$transaction(async (tx) => {
-            const ev = await tx.event.create({
-                data: {
-                    slug: data.slug,
-                    name: data.name,
-                    description: data.description || "",
-                    startsAt: data.startsAt ? new Date(data.startsAt) : null,
-                    endsAt: data.endsAt ? new Date(data.endsAt) : null,
-                    submissionsOpenAt: data.submissionsOpenAt ? new Date(data.submissionsOpenAt) : null,
-                    submissionsCloseAt: new Date(data.submissionsCloseAt),
-                    visibility: data.visibility as any,
-                    maxTeamSize: data.maxTeamSize,
-                    createdById: user.id
-                }
-            });
-
-            await tx.eventRole.create({
-                data: {
-                    eventId: ev.id,
-                    userId: user.id,
-                    role: "ORGANIZER"
-                }
-            });
-
-            return ev;
-        });
-
-        revalidatePath("/organizer");
-        return { success: true, eventId: event.id };
-    } catch (e: any) {
-        if (e.code === "P2002") {
-            return { error: "Event slug already exists" };
-        }
-        return { error: e.message || "Failed to create event" };
-    }
-}
 
 // Function to handle track, prize, and question configuration updates
 export async function updateEventConfig(eventId: string, config: {
@@ -66,9 +17,9 @@ export async function updateEventConfig(eventId: string, config: {
     if (!session?.user) return { error: "Unauthorized" };
 
     const isOrg = await prisma.eventRole.findUnique({
-        where: { eventId_userId_role: { eventId, userId: session.user.id, role: "ORGANIZER" } }
+        where: { eventId_userId: { eventId, userId: session.user.id } }
     });
-    if (!isOrg) return { error: "Forbidden: You are not an organizer of this event" };
+    if (!isOrg || isOrg.role !== "ORGANIZER") return { error: "Forbidden: You are not an organizer of this event" };
 
     // Validate inputs
     const tracksParsed = z.array(updateTrackSchema).safeParse(config.tracks);
@@ -100,6 +51,9 @@ export async function updateEventConfig(eventId: string, config: {
 
             for (const t of tracksParsed.data) {
                 if (t.id) {
+                    if (!existingTracks.find(et => et.id === t.id)) {
+                        throw new Error(`Track ${t.id} does not belong to this event`);
+                    }
                     await tx.track.update({
                         where: { id: t.id },
                         data: { name: t.name, description: t.description || "", sortOrder: t.sortOrder }
@@ -120,6 +74,9 @@ export async function updateEventConfig(eventId: string, config: {
 
             for (const p of prizesParsed.data) {
                 if (p.id) {
+                    if (!existingPrizes.find(ep => ep.id === p.id)) {
+                        throw new Error(`Prize ${p.id} does not belong to this event`);
+                    }
                     await tx.prize.update({
                         where: { id: p.id },
                         data: { name: p.name, description: p.description || "", amount: p.amount, currency: p.currency, sortOrder: p.sortOrder }

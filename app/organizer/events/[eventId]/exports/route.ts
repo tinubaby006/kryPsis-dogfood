@@ -31,6 +31,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
     const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
     if (!role && !adminUser?.isPlatformAdmin) return new NextResponse("Forbidden", { status: 403 });
 
+    // Historical evidence has no live judging-stage completion semantics.
+    if (type === "historical_reviews") {
+        const reviews = await prisma.review.findMany({
+            where: { eventId },
+            include: { scores: { include: { criterion: true }, orderBy: { criterionId: "asc" } } },
+            orderBy: [{ projectId: "asc" }, { judgeUserId: "asc" }, { id: "asc" }]
+        });
+        const rows = reviews.flatMap(review => review.scores.map(score => [
+            eventId, review.id, review.projectId, review.judgeUserId,
+            score.criterion.key, score.value.toString(), review.comment, review.source
+        ]));
+        return new NextResponse("\uFEFF" + toCsv([
+            ["Event ID", "Review ID", "Project ID", "Judge User ID", "Criterion", "Score", "Comment", "Source"],
+            ...rows
+        ]), { headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": 'attachment; filename="historical_reviews.csv"',
+            "Cache-Control": "private, no-store"
+        } });
+    }
+
     if (!stageId) return new NextResponse("Missing stageId", { status: 400 });
 
     const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
@@ -92,6 +113,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
     return new NextResponse("\uFEFF" + csvStr, {
         headers: {
             "Content-Type": "text/csv; charset=utf-8",
+            "Cache-Control": "private, no-store",
             "Content-Disposition": `attachment; filename="${filename}"`
         }
     });

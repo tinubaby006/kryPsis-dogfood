@@ -1,40 +1,40 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
-import { prisma } from "@/lib/db";
+import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/session';
+import { prisma } from '@/lib/db';
 
 export async function GET(request: Request) {
     const url = new URL(request.url);
-    const judgeUserId = url.searchParams.get("judgeUserId");
-    const reqHeaders = request.headers;
-    console.log("Headers:", Object.fromEntries(reqHeaders.entries()));
     const session = await getSession();
-    console.log("Session in GET:", session);
-
-    if (!session?.user) {
-        return new NextResponse("Unauthorized", { status: 401 });
+    const privateHeaders = { 'Cache-Control': 'private, no-store' };
+    if (!session?.user) return new NextResponse('Unauthorized', { status: 401, headers: privateHeaders });
+    const userId = session.user.id;
+    const targetUserId = url.searchParams.get('judgeUserId');
+    if (targetUserId && targetUserId !== userId) {
+        return new NextResponse('Forbidden: Cannot view peer scores', { status: 403, headers: privateHeaders });
     }
-
-    if (judgeUserId && judgeUserId !== session.user.id) {
-        return new NextResponse("Forbidden: Cannot view peer scores", { status: 403 });
-    }
-
-    const hasJudgeRole = await prisma.eventRole.findFirst({
-        where: { userId: session.user.id, role: "JUDGE" }
+    // Preserve a useful all-my-events view, but scope every query to CURRENT memberships.
+    const eventId = url.searchParams.get('eventId');
+    const roles = await prisma.eventRole.findMany({
+        where: { userId, role: 'JUDGE', ...(eventId ? { eventId } : {}) }, select: { eventId: true }
     });
-    const hasStageJudge = await prisma.stageJudge.findFirst({
-        where: { judgeUserId: session.user.id }
+    const eventIds = roles.map(role => role.eventId);
+    if (!eventIds.length) return new NextResponse('Forbidden', { status: 403, headers: privateHeaders });
+    const activePanel = await prisma.stageJudge.findMany({
+        where: { judgeUserId: userId, isActive: true, stage: { eventId: { in: eventIds } } },
+        select: { stageId: true }
     });
-
-    if (!hasJudgeRole && !hasStageJudge) {
-        return new NextResponse("Forbidden", { status: 403 });
-    }
-
-    // Genuinely address judge's scores
-    const targetUserId = judgeUserId || session.user.id;
     const assignments = await prisma.rubricAssignment.findMany({
-        where: { judgeUserId: targetUserId },
-        include: { finalReview: { include: { scores: true } } }
+        where: {
+            judgeUserId: userId, status: { not: 'CANCELLED' },
+            stageId: { in: activePanel.map(panel => panel.stageId) },
+            stage: { eventId: { in: eventIds } }
+        },
+        include: { finalReview: { include: { scores: true } } },
+        orderBy: [{ stageId: 'asc' }, { projectId: 'asc' }]
     });
-
-    return NextResponse.json({ success: true, assignments });
+    const historicalReviews = await prisma.review.findMany({
+        where: { judgeUserId: userId, eventId: { in: eventIds } },
+        include: { scores: true }, orderBy: [{ eventId: 'asc' }, { projectId: 'asc' }]
+    });
+    return NextResponse.json({ success: true, assignments, historicalReviews }, { headers: privateHeaders });
 }

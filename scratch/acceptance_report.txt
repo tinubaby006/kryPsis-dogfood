@@ -1,6 +1,6 @@
 DOGFOOD 2026 acceptance report
 portal: http://127.0.0.1:3000
-claimed: T1 T2
+claimed: T1
 fixtures: E:\Next.js Challenge\Hackathons\dogfoodhack\docs\official\fixtures.json
 
 T1  gallery is public ................. PASS
@@ -11,4 +11,4 @@ T2  judge cannot see peer scores ...... PASS
 T2  participant blocked ............... PASS
 T2  csv export works .................. PASS
 
-claimed T1 T2, verified T1 T2
+claimed T1, verified T1 T2

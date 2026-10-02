@@ -11,9 +11,9 @@ async function checkOrganizerAccess(eventId: string, userId: string) {
     if (user?.isPlatformAdmin) return true;
 
     const isOrg = await prisma.eventRole.findUnique({
-        where: { eventId_userId_role: { eventId, userId, role: "ORGANIZER" } }
+        where: { eventId_userId: { eventId, userId } }
     });
-    return !!isOrg;
+    return !!isOrg && isOrg.role === "ORGANIZER";
 }
 
 export async function addCustomQuestion(eventId: string, label: string, type: QuestionType, required: boolean) {

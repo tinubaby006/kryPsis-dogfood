@@ -23,9 +23,9 @@ export default async function PublicProjectsGallery({
     
     if (session?.user) {
         const orgRole = await prisma.eventRole.findUnique({
-            where: { eventId_userId_role: { eventId, userId: session.user.id, role: "ORGANIZER" } }
+            where: { eventId_userId: { eventId, userId: session.user.id } }
         });
-        isOrganizer = !!orgRole;
+        isOrganizer = !!orgRole && orgRole.role === "ORGANIZER";
         if (!isOrganizer) {
             const user = await prisma.user.findUnique({ where: { id: session.user.id }});
             isOrganizer = !!user?.isPlatformAdmin;

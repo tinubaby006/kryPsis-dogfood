@@ -22,22 +22,7 @@ async function main() {
   });
 
   if (existingImport) {
-    console.warn(`WARNING: Fixture fixtures.json with hash ${fixturesHash} has already been imported on ${existingImport.importedAt.toISOString()}. Proceeding with UPSERTs to ensure idempotency...`);
-  } else {
-    await prisma.fixtureImport.create({
-      data: {
-        sourceName: 'fixtures.json',
-        sourceSha256: fixturesHash,
-        counts: {
-            tracks: data.tracks.length,
-            judges: data.judges.length,
-            teams: data.teams.length,
-            projects: data.projects.length,
-            scores: data.scores.length
-        },
-        rawPayload: {}
-      }
-    });
+    console.warn(`WARNING: Fixture fixtures.json with hash ${fixturesHash} has already been imported on ${existingImport.importedAt.toISOString()}. Proceeding with non-destructive UPSERTs to ensure idempotency...`);
   }
 
   // Pre-calculate standard dev password hash to avoid bcrypt overhead in loop
@@ -76,7 +61,7 @@ async function main() {
               await tx.account.create({
                   data: {
                       id: crypto.randomUUID(),
-                      accountId: user.id, // Better Auth stores user.id as accountId usually? Or just provider account ID. Actually accountId is usually the provider's ID (which is email for credentials)
+                      accountId: user.id,
                       providerId: "credential",
                       userId: user.id,
                       password: devPasswordHash,
@@ -107,10 +92,7 @@ async function main() {
       const fixtureEvent = data.event;
       const eventRecord = await tx.event.upsert({
           where: { slug: fixtureEvent.id },
-          update: {
-              name: fixtureEvent.name,
-              submissionsCloseAt: new Date(fixtureEvent.submissions_close),
-          },
+          update: {}, // Non-destructive update
           create: {
               id: fixtureEvent.id,
               slug: fixtureEvent.id,
@@ -128,7 +110,7 @@ async function main() {
           const track = data.tracks[i];
           await tx.track.upsert({
               where: { id_eventId: { id: track.id, eventId } },
-              update: { name: track.name, sortOrder: i },
+              update: {},
               create: { id: track.id, eventId, name: track.name, sortOrder: i }
           });
       }
@@ -140,7 +122,7 @@ async function main() {
           
           await tx.team.upsert({
               where: { id_eventId: { id: team.id, eventId } },
-              update: { name: team.name },
+              update: {},
               create: { id: team.id, eventId, name: team.name, createdById: creatorId }
           });
 
@@ -149,14 +131,14 @@ async function main() {
               const role = i === 0 ? "OWNER" : "MEMBER";
               await tx.teamMember.upsert({
                   where: { teamId_userId: { teamId: team.id, userId: memberId } },
-                  update: { role },
+                  update: {},
                   create: { eventId, teamId: team.id, userId: memberId, role }
               });
               
               // Assign PARTICIPANT role
               await tx.eventRole.upsert({
-                  where: { eventId_userId_role: { eventId, userId: memberId, role: "PARTICIPANT" } },
-                  update: {},
+                  where: { eventId_userId: { eventId, userId: memberId } },
+                  update: { role: "PARTICIPANT" },
                   create: { eventId, userId: memberId, role: "PARTICIPANT" }
               });
           }
@@ -167,8 +149,8 @@ async function main() {
           const judgeId = usersMap.get(judge.email)!;
           
           await tx.eventRole.upsert({
-              where: { eventId_userId_role: { eventId, userId: judgeId, role: "JUDGE" } },
-              update: {},
+              where: { eventId_userId: { eventId, userId: judgeId } },
+              update: { role: "JUDGE" },
               create: { eventId, userId: judgeId, role: "JUDGE" }
           });
 
@@ -189,13 +171,7 @@ async function main() {
           
           await tx.project.upsert({
               where: { id_eventId: { id: proj.id, eventId } },
-              update: {
-                  title: proj.title,
-                  summary: proj.summary,
-                  repoUrl: proj.repo_url,
-                  status: submittedAt ? "SUBMITTED" : "DRAFT",
-                  submittedAt
-              },
+              update: {},
               create: {
                   id: proj.id,
                   eventId,
@@ -213,7 +189,6 @@ async function main() {
       }
 
       // 8. Dynamic Criteria
-      // Since criteria definitions aren't explicitly listed, we extract them from the first score
       if (data.scores.length > 0) {
           const sampleScore = data.scores[0];
           const criteriaKeys = Object.keys(sampleScore.criteria);
@@ -221,20 +196,17 @@ async function main() {
               const key = criteriaKeys[i];
               await tx.criterion.upsert({
                   where: { eventId_key: { eventId, key } },
-                  update: { sortOrder: i },
+                  update: {},
                   create: { eventId, key, label: key.charAt(0).toUpperCase() + key.slice(1), sortOrder: i }
               });
           }
       }
 
       // 9. Reviews & Scores
-      // Create a map of criterion key to criterion id
       const criteriaMap = new Map<string, string>();
       const criteria = await tx.criterion.findMany({ where: { eventId } });
       for (const c of criteria) criteriaMap.set(c.key, c.id);
 
-      // Map judge emails to users (scores have judge.id, but judge in fixtures has id = jdg_01 etc)
-      // Actually scores reference judge by judge ID!
       const judgeIdToUserId = new Map<string, string>();
       for (const j of data.judges) judgeIdToUserId.set(j.id, usersMap.get(j.email)!);
 
@@ -245,7 +217,7 @@ async function main() {
           
           await tx.review.upsert({
               where: { eventId_judgeUserId_projectId: { eventId, judgeUserId, projectId: score.project } },
-              update: { comment: score.comment || "" },
+              update: {},
               create: {
                   id: reviewId,
                   eventId,
@@ -256,7 +228,6 @@ async function main() {
               }
           });
 
-          // Re-fetch review to get exact ID in case of existing
           const reviewRecord = await tx.review.findUnique({
               where: { eventId_judgeUserId_projectId: { eventId, judgeUserId, projectId: score.project } }
           });
@@ -267,7 +238,7 @@ async function main() {
               const value = score.criteria[key];
               await tx.criterionScore.upsert({
                   where: { reviewId_criterionId: { reviewId: reviewRecord!.id, criterionId } },
-                  update: { value },
+                  update: {},
                   create: { eventId, reviewId: reviewRecord!.id, criterionId, value }
               });
           }
@@ -311,16 +282,17 @@ async function main() {
           create: { eventId: demoEventId, name: "Demo Round 1", state: "OPEN", scopeKey: demoEventId }
       });
 
-      // Clear existing demo rubric for idempotency
-      await tx.rubricVersion.deleteMany({ where: { stageId: demoStage.id } });
-      
-      const demoRubric = await tx.rubricVersion.create({
-          data: { stageId: demoStage.id, versionHash: "v1" }
-      });
-      
-      await tx.rubricCriterion.create({
-          data: { rubricVersionId: demoRubric.id, key: "demo_ux", title: "UX", weightBasisPts: 10000, maxScore: 5, sortOrder: 0 }
-      });
+      // ONLY create if missing to avoid destructively deleting referenced rubric versions
+      let demoRubric = await tx.rubricVersion.findFirst({ where: { stageId: demoStage.id } });
+      if (!demoRubric) {
+          demoRubric = await tx.rubricVersion.create({
+              data: { stageId: demoStage.id, versionHash: "v1" }
+          });
+          
+          await tx.rubricCriterion.create({
+              data: { rubricVersionId: demoRubric.id, key: "demo_ux", title: "UX", weightBasisPts: 10000, maxScore: 5, sortOrder: 0 }
+          });
+      }
 
       await tx.stageProject.upsert({
           where: { stageId_projectId: { stageId: demoStage.id, projectId: "demo_proj_1" } },
@@ -333,6 +305,31 @@ async function main() {
           update: {},
           create: { stageId: demoStage.id, judgeUserId: demoJudge.id }
       });
+      
+      // Ensure demo judge has JUDGE role for event
+      await tx.eventRole.upsert({
+          where: { eventId_userId: { eventId: demoEventId, userId: demoJudge.id } },
+          update: { role: "JUDGE" },
+          create: { eventId: demoEventId, userId: demoJudge.id, role: "JUDGE" }
+      });
+
+      // 11. Finalize Import Status (Inside Transaction)
+      if (!existingImport) {
+          await tx.fixtureImport.create({
+              data: {
+                  sourceName: 'fixtures.json',
+                  sourceSha256: fixturesHash,
+                  counts: {
+                      tracks: data.tracks.length,
+                      judges: data.judges.length,
+                      teams: data.teams.length,
+                      projects: data.projects.length,
+                      scores: data.scores.length
+                  },
+                  rawPayload: {}
+              }
+          });
+      }
 
   });
 

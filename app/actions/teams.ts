@@ -43,8 +43,8 @@ export async function createTeam(eventId: string, name: string) {
 
             // Assign PARTICIPANT role
             await tx.eventRole.upsert({
-                where: { eventId_userId_role: { eventId, userId: session.user.id, role: "PARTICIPANT" } },
-                update: {},
+                where: { eventId_userId: { eventId, userId: session.user.id } },
+                update: { role: "PARTICIPANT" },
                 create: { eventId, userId: session.user.id, role: "PARTICIPANT" }
             });
 
