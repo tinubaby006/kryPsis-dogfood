@@ -9,7 +9,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-async function getSessionToken(email: string, role?: 'ORGANIZER'|'JUDGE', eventId?: string): Promise<{ token: string, userId: string }> {
+async function getSessionToken(email: string, role?: 'ORGANIZER'|'JUDGE'|'EVENT_CREATOR', eventId?: string): Promise<{ token: string, userId: string }> {
     try {
         await prisma.user.delete({ where: { email } }).catch(() => {});
         const res = await fetch("http://127.0.0.1:3000/api/auth/sign-up/email", {
