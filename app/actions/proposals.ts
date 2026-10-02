@@ -12,11 +12,26 @@ export async function createProposal(data: {
     timeZone: string;
     submissionsCloseAt: string;
     maxTeamSize: number;
+    tracksMode: "SINGLE_POOL" | "MULTI_TRACK";
 }) {
     const session = await getSession();
     if (!session?.user) return { error: "Unauthorized" };
 
     try {
+        if (!data.name || data.name.trim().length < 2) return { error: "Event name must be at least 2 characters" };
+        if (!/^[a-z0-9-]+$/.test(data.proposedSlug)) return { error: "Slug must contain only lowercase letters, numbers, and hyphens" };
+        if (!["SINGLE_POOL", "MULTI_TRACK"].includes(data.tracksMode)) return { error: "Invalid tracks mode" };
+        if (data.maxTeamSize < 1 || data.maxTeamSize > 20) return { error: "Max team size must be between 1 and 20" };
+        
+        try {
+            Intl.DateTimeFormat(undefined, { timeZone: data.timeZone });
+        } catch (e) {
+            return { error: "Invalid timezone" };
+        }
+
+        const closingDate = parseLocalInTimezone(data.submissionsCloseAt, data.timeZone);
+        if (isNaN(closingDate.getTime())) return { error: "Invalid submissions close date" };
+
         const slugConflict = await prisma.event.findUnique({ where: { slug: data.proposedSlug } });
         if (slugConflict) return { error: "An event with this slug already exists" };
 
@@ -33,6 +48,7 @@ export async function createProposal(data: {
                     proposedSlug: data.proposedSlug,
                     description: data.description,
                     timeZone: data.timeZone,
+                    tracksMode: data.tracksMode,
                     submissionsCloseAt: parseLocalInTimezone(data.submissionsCloseAt, data.timeZone),
                     maxTeamSize: data.maxTeamSize,
                     status: "SUBMITTED",
@@ -66,11 +82,26 @@ export async function editProposal(proposalId: string, revision: number, data: {
     timeZone: string;
     submissionsCloseAt: string;
     maxTeamSize: number;
+    tracksMode: "SINGLE_POOL" | "MULTI_TRACK";
 }) {
     const session = await getSession();
     if (!session?.user) return { error: "Unauthorized" };
 
     try {
+        if (!data.name || data.name.trim().length < 2) return { error: "Event name must be at least 2 characters" };
+        if (!/^[a-z0-9-]+$/.test(data.proposedSlug)) return { error: "Slug must contain only lowercase letters, numbers, and hyphens" };
+        if (!["SINGLE_POOL", "MULTI_TRACK"].includes(data.tracksMode)) return { error: "Invalid tracks mode" };
+        if (data.maxTeamSize < 1 || data.maxTeamSize > 20) return { error: "Max team size must be between 1 and 20" };
+        
+        try {
+            Intl.DateTimeFormat(undefined, { timeZone: data.timeZone });
+        } catch (e) {
+            return { error: "Invalid timezone" };
+        }
+
+        const closingDate = parseLocalInTimezone(data.submissionsCloseAt, data.timeZone);
+        if (isNaN(closingDate.getTime())) return { error: "Invalid submissions close date" };
+
         const result = await prisma.$transaction(async (tx) => {
             const proposal = await tx.eventProposal.findUnique({ where: { id: proposalId } });
             if (!proposal) throw new Error("Proposal not found");
@@ -98,6 +129,7 @@ export async function editProposal(proposalId: string, revision: number, data: {
                     proposedSlug: data.proposedSlug,
                     description: data.description,
                     timeZone: data.timeZone,
+                    tracksMode: data.tracksMode,
                     submissionsCloseAt: parseLocalInTimezone(data.submissionsCloseAt, data.timeZone),
                     maxTeamSize: data.maxTeamSize,
                     status: "SUBMITTED",

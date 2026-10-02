@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireEventOrganizer, PermissionError } from "@/lib/permissions";
 import { getSession } from "@/lib/session";
 
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ eventId: string, accessId: string }> }
 ) {
-    const session = await getSession();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
     const { eventId, accessId } = await params;
-
-    const organizer = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
     
-    if (!organizer && !adminUser?.isPlatformAdmin) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    let user;
+    try {
+        user = await requireEventOrganizer(eventId);
+    } catch (e: any) {
+        if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: e.statusCode });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
@@ -69,7 +66,7 @@ export async function POST(
             await tx.auditLog.create({
                 data: {
                     action: "JUDGE_ACCESS_REACTIVATED",
-                    actorUserId: session.user.id,
+                    actorUserId: user.id,
                     entityType: "EVENT",
                     entityId: eventId,
                     metadata: { accessId, userId: access.userId }

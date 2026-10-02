@@ -16,22 +16,55 @@ export default function OrganizerExplainabilityView() {
     const [error, setError] = useState("");
     const [committing, setCommitting] = useState(false);
     const [publishing, setPublishing] = useState(false);
+    const [finalizing, setFinalizing] = useState(false);
     const [published, setPublished] = useState(false);
+    const [isPersisted, setIsPersisted] = useState(false);
+    const [runId, setRunId] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
     }, []);
 
-    const loadData = async () => {
+    const loadData = async (forcePreview = false) => {
         setLoading(true);
         setError("");
-        const res = await getCalculationPreviewAction(eventId, stageId);
-        if (res.error) setError(res.error);
-        else {
-            setPreview({
-                ...res.preview,
-                stageState: (res as any).stageState
-            });
+        
+        try {
+            if (!forcePreview) {
+                const { getPersistedCalculationAction } = await import("../../judging-actions");
+                const persisted = await getPersistedCalculationAction(eventId, stageId);
+                
+                if (persisted.success) {
+                    setPreview({
+                        status: persisted.run.status,
+                        stageState: persisted.stageState,
+                        diagnostics: persisted.run.diagnostics || (persisted.snapshotData as any)?.evidence,
+                        results: persisted.results,
+                        calibrations: persisted.run.calibrations,
+                        inputHash: persisted.run.inputHash,
+                        configHash: persisted.run.configHash
+                    });
+                    setIsPersisted(true);
+                    setRunId(persisted.run.id);
+                    setPublished(persisted.isPublished || false);
+                    setLoading(false);
+                    return;
+                }
+            }
+            
+            const res = await getCalculationPreviewAction(eventId, stageId);
+            const response = res as any;
+            if (!response.success) setError(response.error || response.message || "Error");
+            else {
+                setPreview({
+                    ...response.preview,
+                    stageState: response.stageState
+                });
+                setIsPersisted(false);
+                setRunId(null);
+            }
+        } catch (e: any) {
+            setError(e.message);
         }
         setLoading(false);
     };
@@ -40,22 +73,39 @@ export default function OrganizerExplainabilityView() {
         if (!preview) return;
         setCommitting(true);
         const res = await commitCalculationAction(eventId, stageId, preview.inputHash, preview.configHash);
-        if (res.error) setError(res.error);
+        const response = res as any;
+        if (!response.success) setError(response.error || response.message || "Error");
         else {
             alert("Calculation committed successfully!");
-            loadData(); // reload
+            loadData();
         }
         setCommitting(false);
+    };
+
+    const handleFinalize = async () => {
+        if (!runId) return;
+        setFinalizing(true);
+        const { finalizeCalculation } = await import("../../judging-actions");
+        const res = await finalizeCalculation(eventId, stageId, runId);
+        const response = res as any;
+        if (!response.success) setError(response.error || response.message || "Error");
+        else {
+            alert("Stage finalized successfully!");
+            loadData();
+        }
+        setFinalizing(false);
     };
 
     const handlePublish = async () => {
         if (!confirm("Are you sure? This will make the results visible to the public.")) return;
         setPublishing(true);
         const res = await publishStageAction(eventId, stageId);
-        if (res.error) setError(res.error);
+        const response = res as any;
+        if (!response.success) setError(response.error || response.message || "Error");
         else {
             alert("Results published successfully!");
             setPublished(true);
+            loadData();
         }
         setPublishing(false);
     };
@@ -64,6 +114,7 @@ export default function OrganizerExplainabilityView() {
     if (error) return <div className="p-8 text-destructive font-bold bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>;
 
     const isConnected = preview?.diagnostics?.connected;
+    const isFixture = preview?.diagnostics?.completeness === 'UNKNOWN';
 
     return (
         <div className="max-w-6xl mx-auto p-4 sm:p-8">
@@ -73,19 +124,29 @@ export default function OrganizerExplainabilityView() {
                         &larr; Back to Organizer Dashboard
                     </Link>
                     <h1 className="text-3xl font-extrabold text-foreground flex items-center gap-2">
-                        <Calculator className="w-8 h-8 text-primary" /> Algorithm Explainability
+                        <Calculator className="w-8 h-8 text-primary" /> {isPersisted ? "Persisted Results" : "Algorithm Preview"}
                     </h1>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={loadData} className="px-4 py-2 border border-border rounded font-medium text-sm bg-card hover:bg-muted focus:ring-2 focus:ring-ring focus:outline-none transition-colors">
-                        Recalculate
-                    </button>
-                    {preview.status !== "INCOMPLETE_EVIDENCE" && preview.stageState !== "FINALIZED" && preview.stageState !== "PUBLISHED" && (
+                    {preview.stageState !== "FINALIZED" && preview.stageState !== "PUBLISHED" && (
+                        <button onClick={() => loadData(true)} className="px-4 py-2 border border-border rounded font-medium text-sm bg-card hover:bg-muted focus:ring-2 focus:ring-ring focus:outline-none transition-colors">
+                            Recalculate
+                        </button>
+                    )}
+                    
+                    {!isPersisted && preview.status !== "INCOMPLETE_EVIDENCE" && preview.stageState === "CLOSED" && (
                         <button disabled={committing} onClick={handleCommit} className="px-4 py-2 bg-primary text-primary-foreground rounded font-medium text-sm hover:bg-primary-hover focus:ring-2 focus:ring-ring focus:outline-none transition-colors flex items-center gap-2 disabled:opacity-50">
                             <Save className="w-4 h-4" /> {committing ? "Committing..." : "Commit Results"}
                         </button>
                     )}
-                    {(preview.stageState === "FINALIZED" || preview.stageState === "PUBLISHED") && (
+                    
+                    {isPersisted && preview.stageState === "CALCULATED" && (
+                        <button disabled={finalizing || isFixture || preview.status !== "SUCCESS"} onClick={handleFinalize} className="px-4 py-2 bg-primary text-primary-foreground rounded font-medium text-sm hover:bg-primary-hover focus:ring-2 focus:ring-ring focus:outline-none transition-colors flex items-center gap-2 disabled:opacity-50">
+                            <CheckCircle className="w-4 h-4" /> {finalizing ? "Finalizing..." : "Finalize Stage"}
+                        </button>
+                    )}
+
+                    {isPersisted && preview.stageState === "FINALIZED" && (
                         <button 
                             disabled={publishing || published} 
                             onClick={handlePublish} 
@@ -107,7 +168,15 @@ export default function OrganizerExplainabilityView() {
                         </div>
                     ) : preview.status === "UNSUPPORTED" ? (
                         <div className="text-warning font-bold flex items-center gap-2 bg-warning/10 p-3 rounded border border-warning/20">
-                            <AlertTriangle className="w-5 h-5" /> UNSUPPORTED (FALLBACK)
+                            <AlertTriangle className="w-5 h-5" /> UNSUPPORTED (DISCONNECTED)
+                        </div>
+                    ) : preview.status === "SINGLE_JUDGE_UNCALIBRATED" ? (
+                        <div className="text-warning font-bold flex items-center gap-2 bg-warning/10 p-3 rounded border border-warning/20">
+                            <AlertTriangle className="w-5 h-5" /> SINGLE JUDGE UNCALIBRATED
+                        </div>
+                    ) : preview.status === "NUMERICAL_FAILURE" ? (
+                        <div className="text-destructive font-bold flex items-center gap-2 bg-destructive/10 p-3 rounded border border-destructive/20">
+                            <AlertTriangle className="w-5 h-5" /> NUMERICAL FAILURE
                         </div>
                     ) : (
                         <div className="text-success font-bold flex items-center gap-2 bg-success/10 p-3 rounded border border-success/20">
@@ -115,24 +184,31 @@ export default function OrganizerExplainabilityView() {
                         </div>
                     )}
                     <div className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        Stage State: <span className="text-foreground">{preview.stageState || "CALCULATING"}</span>
+                        Stage State: <span className="text-foreground">{preview.stageState}</span>
                     </div>
+                    {isFixture && (
+                        <div className="mt-2 text-xs font-bold text-destructive bg-destructive/10 p-1 rounded inline-block">
+                            FIXTURE: Completeness Unknown. Cannot Finalize.
+                        </div>
+                    )}
                     <p className="text-xs text-muted-foreground mt-2">
                         {preview.status === "INCOMPLETE_EVIDENCE" 
                             ? "Not all required reviews (R) are submitted. Judging cannot be finalized safely."
                             : preview.status === "UNSUPPORTED"
                             ? "Disconnected multi-judge panel. Falling back to raw mean. Cannot calibrate safely."
+                            : preview.status === "SINGLE_JUDGE_UNCALIBRATED"
+                            ? "Only one active judge. Calibrations are unsupported."
                             : "Judge overlap graph is connected. Bias offsets were successfully calculated."}
                     </p>
                 </div>
                 <div className="bg-card p-6 rounded-xl border border-border shadow-sm col-span-2 hover:shadow-md transition-shadow">
                     <h3 className="font-bold text-foreground mb-2 flex items-center gap-1"><ShieldCheck className="w-4 h-4 text-primary" /> Diagnostics</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm mt-3">
-                        <div><strong>Total Reviews:</strong> <span className="text-muted-foreground">{preview.diagnostics.totalReviews}</span></div>
-                        <div><strong>Active Judges:</strong> <span className="text-muted-foreground">{preview.diagnostics.judgesCount}</span></div>
-                        <div><strong>Projects Scored:</strong> <span className="text-muted-foreground">{preview.diagnostics.projectsCount}</span></div>
-                        <div><strong>Config Hash:</strong> <span className="font-mono text-xs bg-muted text-muted-foreground p-1 rounded select-all">{preview.configHash.slice(0,8)}</span></div>
-                        <div><strong>Input Hash:</strong> <span className="font-mono text-xs bg-muted text-muted-foreground p-1 rounded select-all">{preview.inputHash.slice(0,8)}</span></div>
+                        <div><strong>Total Reviews:</strong> <span className="text-muted-foreground">{preview.diagnostics?.totalReviews ?? 'N/A'}</span></div>
+                        <div><strong>Active Judges:</strong> <span className="text-muted-foreground">{preview.diagnostics?.judgesCount ?? 'N/A'}</span></div>
+                        <div><strong>Projects Scored:</strong> <span className="text-muted-foreground">{preview.diagnostics?.projectsCount ?? 'N/A'}</span></div>
+                        {preview.configHash && <div><strong>Config Hash:</strong> <span className="font-mono text-xs bg-muted text-muted-foreground p-1 rounded select-all">{preview.configHash.slice(0,8)}</span></div>}
+                        {preview.inputHash && <div><strong>Input Hash:</strong> <span className="font-mono text-xs bg-muted text-muted-foreground p-1 rounded select-all">{preview.inputHash.slice(0,8)}</span></div>}
                     </div>
                 </div>
             </div>
@@ -162,9 +238,9 @@ export default function OrganizerExplainabilityView() {
                                     <td className="px-4 py-2 font-bold text-foreground">{r.rank}</td>
                                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.projectId}</td>
                                     <td className="px-4 py-2 text-right">{r.reviewCount}</td>
-                                    <td className="px-4 py-2 text-right text-muted-foreground">{r.rawMean.toFixed(2)}</td>
-                                    <td className="px-4 py-2 text-right font-bold text-primary bg-primary/5">{r.normalizedMean.toFixed(2)}</td>
-                                    <td className="px-4 py-2 text-right text-muted-foreground">{r.sd ? r.sd.toFixed(2) : "N/A"}</td>
+                                    <td className="px-4 py-2 text-right text-muted-foreground">{r.rawMean?.toFixed(2)}</td>
+                                    <td className="px-4 py-2 text-right font-bold text-primary bg-primary/5">{r.normalizedMean?.toFixed(2)}</td>
+                                    <td className="px-4 py-2 text-right text-muted-foreground">{r.sd != null ? r.sd.toFixed(2) : "0.00"}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -186,23 +262,20 @@ export default function OrganizerExplainabilityView() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {preview.calibrations.length === 0 && (
+                            {(!preview.calibrations || preview.calibrations.length === 0) && (
                                 <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No judge calibration data available.</td></tr>
                             )}
-                            {preview.calibrations.map((c: any) => (
+                            {preview.calibrations && preview.calibrations.map((c: any) => (
                                 <tr key={c.judgeUserId} className="hover:bg-muted/50 transition-colors">
                                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{c.judgeUserId}</td>
                                     <td className="px-4 py-2 text-right">{c.reviewCount}</td>
                                     <td className={`px-4 py-2 text-right font-bold ${c.offset > 0 ? 'text-success' : c.offset < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                                        {c.offset > 0 ? '+' : ''}{c.offset.toFixed(2)}
+                                        {c.offset > 0 ? '+' : ''}{c.offset?.toFixed(2)}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                </div>
-                <div className="p-4 bg-muted text-xs text-muted-foreground border-t border-border">
-                    <strong>Limitations:</strong> The WLS algorithm assumes bias is constant across all projects for a judge. It does not account for specific track-expertise deviations. Normalization clamps extreme outliers back to [0, 100].
                 </div>
             </div>
         </div>

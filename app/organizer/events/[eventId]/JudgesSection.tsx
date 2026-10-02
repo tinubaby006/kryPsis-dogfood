@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 
-export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {id: string, name: string}[] }) {
+export function JudgesSection({ eventId, tracks, tracksMode }: { eventId: string, tracks: {id: string, name: string}[], tracksMode: string }) {
     const [accesses, setAccesses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [email, setEmail] = useState("");
     const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    const [totalAccesses, setTotalAccesses] = useState(0);
 
     useEffect(() => {
         fetchAccesses();
@@ -17,10 +19,11 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
     const fetchAccesses = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/events/${eventId}/judge-access`);
+            const res = await fetch(`/api/events/${eventId}/judge-access?limit=2`);
             if (!res.ok) throw new Error("Failed to load judges");
             const data = await res.json();
             setAccesses(data.accesses);
+            setTotalAccesses(data.total);
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -33,10 +36,11 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
         setError("");
         setSubmitting(true);
         try {
+            const trackIds = tracksMode === "SINGLE_POOL" ? [] : selectedTracks;
             const res = await fetch(`/api/events/${eventId}/judge-access`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, trackIds: selectedTracks })
+                body: JSON.stringify({ email, trackIds })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
@@ -113,7 +117,7 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
     };
 
     return (
-        <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm mt-8">
+        <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
             <h2 className="text-xl font-bold mb-6 font-heading border-b border-border pb-3 text-foreground">Judges</h2>
             
             {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 rounded-md text-sm mb-6 font-medium">{error}</div>}
@@ -131,29 +135,31 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
                             onChange={e => setEmail(e.target.value)}
                         />
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-foreground mb-2">Select tracks for this judge (required):</p>
-                        <div className="flex flex-wrap gap-2.5">
-                            {tracks.map(t => (
-                                <label key={t.id} className="inline-flex items-center text-sm bg-background border border-border px-3 py-1.5 rounded-md cursor-pointer hover:border-primary/50 transition-colors text-foreground">
-                                    <input 
-                                        type="checkbox" 
-                                        className="mr-2"
-                                        checked={selectedTracks.includes(t.id)}
-                                        onChange={e => {
-                                            if (e.target.checked) setSelectedTracks([...selectedTracks, t.id]);
-                                            else setSelectedTracks(selectedTracks.filter(id => id !== t.id));
-                                        }}
-                                    />
-                                    {t.name}
-                                </label>
-                            ))}
+                    {tracksMode === "MULTI_TRACK" && (
+                        <div>
+                            <p className="text-sm font-medium text-foreground mb-2">Select tracks for this judge (required):</p>
+                            <div className="flex flex-wrap gap-2.5">
+                                {tracks.map(t => (
+                                    <label key={t.id} className="inline-flex items-center text-sm bg-background border border-border px-3 py-1.5 rounded-md cursor-pointer hover:border-primary/50 transition-colors text-foreground">
+                                        <input 
+                                            type="checkbox" 
+                                            className="mr-2"
+                                            checked={selectedTracks.includes(t.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) setSelectedTracks([...selectedTracks, t.id]);
+                                                else setSelectedTracks(selectedTracks.filter(id => id !== t.id));
+                                            }}
+                                        />
+                                        {t.name}
+                                    </label>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                     <div className="pt-2">
                         <button 
                             type="submit" 
-                            disabled={submitting || selectedTracks.length === 0}
+                            disabled={submitting || (tracksMode === "MULTI_TRACK" && selectedTracks.length === 0)}
                             className="bg-primary text-primary-foreground px-5 py-2.5 rounded-md text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-sm"
                         >
                             {submitting ? "Processing..." : "Grant / Create Invite"}
@@ -170,48 +176,57 @@ export function JudgesSection({ eventId, tracks }: { eventId: string, tracks: {i
                     <p className="text-sm text-muted-foreground max-w-md">Use the form above to grant judging access to user emails and assign them to specific tracks.</p>
                 </div>
             ) : (
-                <ul className="space-y-3">
-                    {accesses.map(a => (
-                        <li key={a.id} className="border border-border bg-background rounded-lg p-4 text-sm flex justify-between items-start shadow-sm">
-                            <div>
-                                <div className="font-semibold text-foreground">{a.user?.name || a.emailNormalized}</div>
-                                <div className="text-muted-foreground text-xs mb-2">{a.emailNormalized}</div>
-                                <div className="flex flex-wrap gap-1.5 mb-3">
-                                    {a.tracks.map((t: any) => (
-                                        <span key={t.id} className="bg-muted text-muted-foreground border border-border text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded">
-                                            {t.name}
-                                        </span>
-                                    ))}
+                <div className="space-y-4">
+                    <ul className="space-y-3">
+                        {accesses.map(a => (
+                            <li key={a.id} className="border border-border bg-background rounded-lg p-4 text-sm flex justify-between items-start shadow-sm">
+                                <div>
+                                    <div className="font-semibold text-foreground">{a.user?.name || a.emailNormalized}</div>
+                                    <div className="text-muted-foreground text-xs mb-2">{a.emailNormalized}</div>
+                                    <div className="flex flex-wrap gap-1.5 mb-3">
+                                        {a.tracks.map((t: any) => (
+                                            <span key={t.id} className="bg-muted text-muted-foreground border border-border text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded">
+                                                {t.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border inline-block ${
+                                        a.status === 'ACTIVE' ? 'bg-success/10 text-success border-success/20' :
+                                        a.status === 'INVITED' ? 'bg-warning/10 text-warning border-warning/20' :
+                                        a.status === 'AWAITING_CONFIRMATION' ? 'bg-primary/10 text-primary border-primary/20' :
+                                        a.status === 'EXPIRED' ? 'bg-muted text-muted-foreground border-border' : 'bg-destructive/10 text-destructive-text border-destructive/20'
+                                    }`}>
+                                        {a.status}
+                                    </div>
+                                    {a.status === 'INVITED' && a.expiresAt && (
+                                        <div className="text-xs font-medium text-muted-foreground mt-2">Expires: {new Date(a.expiresAt).toLocaleDateString()}</div>
+                                    )}
                                 </div>
-                                <div className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border inline-block ${
-                                    a.status === 'ACTIVE' ? 'bg-success/10 text-success border-success/20' :
-                                    a.status === 'INVITED' ? 'bg-warning/10 text-warning border-warning/20' :
-                                    a.status === 'AWAITING_CONFIRMATION' ? 'bg-primary/10 text-primary border-primary/20' :
-                                    a.status === 'EXPIRED' ? 'bg-muted text-muted-foreground border-border' : 'bg-destructive/10 text-destructive-text border-destructive/20'
-                                }`}>
-                                    {a.status}
+                                <div className="flex flex-col gap-2 text-right">
+                                    {a.status === 'AWAITING_CONFIRMATION' && (
+                                        <button onClick={() => handleConfirm(a.id)} className="text-xs bg-success text-success-foreground px-3 py-1.5 rounded-md hover:bg-success/90 font-medium transition-colors shadow-sm">Confirm Account</button>
+                                    )}
+                                    {(a.status === 'INVITED' || a.status === 'EXPIRED') && (
+                                        <button onClick={() => handleRenew(a.id)} className="text-xs text-primary font-medium hover:underline">Renew Invite</button>
+                                    )}
+                                    {a.status === 'REVOKED' && (
+                                        <button onClick={() => handleReactivate(a.id)} className="text-xs text-primary font-medium hover:underline">Reactivate</button>
+                                    )}
+                                    {a.status !== 'REVOKED' && (
+                                        <button onClick={() => handleRevoke(a.id)} className="text-xs text-destructive-text font-medium hover:underline">Revoke</button>
+                                    )}
                                 </div>
-                                {a.status === 'INVITED' && a.expiresAt && (
-                                    <div className="text-xs font-medium text-muted-foreground mt-2">Expires: {new Date(a.expiresAt).toLocaleDateString()}</div>
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-2 text-right">
-                                {a.status === 'AWAITING_CONFIRMATION' && (
-                                    <button onClick={() => handleConfirm(a.id)} className="text-xs bg-success text-success-foreground px-3 py-1.5 rounded-md hover:bg-success/90 font-medium transition-colors shadow-sm">Confirm Account</button>
-                                )}
-                                {(a.status === 'INVITED' || a.status === 'EXPIRED') && (
-                                    <button onClick={() => handleRenew(a.id)} className="text-xs text-primary font-medium hover:underline">Renew Invite</button>
-                                )}
-                                {a.status === 'REVOKED' && (
-                                    <button onClick={() => handleReactivate(a.id)} className="text-xs text-primary font-medium hover:underline">Reactivate</button>
-                                )}
-                                {a.status !== 'REVOKED' && (
-                                    <button onClick={() => handleRevoke(a.id)} className="text-xs text-destructive-text font-medium hover:underline">Revoke</button>
-                                )}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                            </li>
+                        ))}
+                    </ul>
+                    {totalAccesses > 2 && (
+                        <div className="text-center pt-2">
+                            <a href={`/organizer/events/${eventId}/judges`} className="text-sm font-medium text-primary hover:underline">
+                                View all {totalAccesses} judges
+                            </a>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

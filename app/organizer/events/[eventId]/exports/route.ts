@@ -1,20 +1,7 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { requireEventOrganizer, PermissionError } from "@/lib/permissions";
 import { NextResponse } from "next/server";
-
-function safeCsvField(value: any) {
-    if (value === null || value === undefined) return '""';
-    let str = String(value).replace(/"/g, '""');
-    // Safe spreadsheet handling of user-entered formula-like text
-    if (/^[=+\-@]/.test(str)) {
-        str = "'" + str;
-    }
-    return `"${str}"`;
-}
-
-function toCsv(rows: any[][]) {
-    return rows.map(r => r.map(safeCsvField).join(",")).join("\n");
-}
+import { generateCSV } from "@/lib/csv";
 
 export async function GET(request: Request, { params }: { params: Promise<{ eventId: string }> }) {
     const { eventId } = await params;
@@ -22,95 +9,215 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
     const type = url.searchParams.get("type");
     const stageId = url.searchParams.get("stageId");
 
-    const session = await getSession();
-    if (!session?.user) return new NextResponse("Unauthorized", { status: 401 });
+    try {
+        await requireEventOrganizer(eventId);
+    } catch (e: any) {
+        if (e instanceof PermissionError) return new NextResponse(e.message, { status: e.statusCode });
+        return new NextResponse("Unauthorized", { status: 401 });
+    }
 
-    const role = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
-    if (!role && !adminUser?.isPlatformAdmin) return new NextResponse("Forbidden", { status: 403 });
+    if (!stageId && type !== "historical_reviews") {
+        return new NextResponse("Missing stageId", { status: 400 });
+    }
 
-    // Historical evidence has no live judging-stage completion semantics.
+    let csvStr = "";
+    let filename = `export_${type}_${stageId || eventId}.csv`;
+
     if (type === "historical_reviews") {
         const reviews = await prisma.review.findMany({
-            where: { eventId },
-            include: { scores: { include: { criterion: true }, orderBy: { criterionId: "asc" } } },
+            where: { eventId, source: "FIXTURE" },
+            include: { 
+                scores: { include: { criterion: true }, orderBy: { criterionId: "asc" } },
+                project: true,
+                judge: true
+            },
             orderBy: [{ projectId: "asc" }, { judgeUserId: "asc" }, { id: "asc" }]
         });
-        const rows = reviews.flatMap(review => review.scores.map(score => [
-            eventId, review.id, review.projectId, review.judgeUserId,
-            score.criterion.key, score.value.toString(), review.comment, review.source
-        ]));
-        return new NextResponse("\uFEFF" + toCsv([
-            ["Event ID", "Review ID", "Project ID", "Judge User ID", "Criterion", "Score", "Comment", "Source"],
-            ...rows
-        ]), { headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="historical_reviews.csv"',
-            "Cache-Control": "private, no-store"
-        } });
-    }
+        
+        type HistRow = any;
+        const rows: HistRow[] = reviews.flatMap(review => review.scores.map(score => ({
+            eventId,
+            reviewId: review.id,
+            projectId: review.projectId,
+            projectTitle: review.project.title,
+            judgeUserId: review.judgeUserId,
+            judgeName: review.judge.name || "",
+            judgeEmail: review.judge.email || "",
+            criterionKey: score.criterion.key,
+            criterionName: score.criterion.label,
+            originalValue: score.value,
+            comment: review.comment || "",
+            source: review.source,
+            sourceKey: "",
+            importedAt: "",
+            originalSubmittedAt: ""
+        })));
 
-    if (!stageId) return new NextResponse("Missing stageId", { status: 400 });
+        csvStr = generateCSV(rows, [
+            { header: "Event ID", key: "eventId" },
+            { header: "Review ID", key: "reviewId" },
+            { header: "Project ID", key: "projectId" },
+            { header: "Project Title", key: "projectTitle" },
+            { header: "Judge User ID", key: "judgeUserId" },
+            { header: "Judge Name", key: "judgeName" },
+            { header: "Judge Email", key: "judgeEmail" },
+            { header: "Criterion Key", key: "criterionKey" },
+            { header: "Criterion Name", key: "criterionName" },
+            { header: "Original Value", key: "originalValue" },
+            { header: "Comment", key: "comment" },
+            { header: "Source", key: "source" },
+            { header: "Source Key", key: "sourceKey" },
+            { header: "Imported At", key: "importedAt" },
+            { header: "Original Submitted At", key: "originalSubmittedAt" }
+        ]);
+    } else {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId!, eventId } });
+        if (!stage) return new NextResponse("Stage not found", { status: 404 });
 
-    const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
-    if (!stage) return new NextResponse("Stage not found", { status: 404 });
-
-    let headers: string[] = [];
-    let data: any[][] = [];
-    let filename = `export_${type}_${stageId}.csv`;
-
-    if (type === "assignments") {
-        const assignments = await prisma.rubricAssignment.findMany({
-            where: { stageId }
-        });
-        headers = ["Assignment ID", "Project ID", "Judge User ID", "Status", "Created At"];
-        data = assignments.map(a => [a.id, a.projectId, a.judgeUserId, a.status, a.createdAt.toISOString()]);
-    } else if (type === "raw_reviews") {
-        const assignments = await prisma.rubricAssignment.findMany({
-            where: { stageId },
-            include: { finalReview: { include: { scores: true } } }
-        });
-        headers = ["Assignment ID", "Project ID", "Judge User ID", "Criterion ID", "Score"];
-        for (const asn of assignments) {
-            if (asn.finalReview) {
-                for (const sc of asn.finalReview.scores) {
-                    data.push([asn.id, asn.projectId, asn.judgeUserId, sc.criterionId, sc.value]);
+        if (type === "assignments") {
+            const assignments = await prisma.rubricAssignment.findMany({
+                where: { stageId: stageId! },
+                include: { project: true, judge: true },
+                orderBy: { createdAt: 'asc' }
+            });
+            csvStr = generateCSV(assignments, [
+                { header: "Assignment ID", key: "id" },
+                { header: "Project ID", key: "projectId" },
+                { header: "Project Title", key: (r) => r.project.title },
+                { header: "Judge User ID", key: "judgeUserId" },
+                { header: "Judge Name", key: (r) => r.judge.name || "" },
+                { header: "Judge Email", key: (r) => r.judge.email || "" },
+                { header: "Status", key: "status" },
+                { header: "Created At", key: (r) => r.createdAt.toISOString() }
+            ]);
+        } else if (type === "raw_reviews") {
+            const assignments = await prisma.rubricAssignment.findMany({
+                where: { stageId: stageId!, status: "COMPLETED" },
+                include: { 
+                    finalReview: { include: { scores: { include: { criterion: true } } } },
+                    project: true,
+                    judge: true
+                }
+            });
+            const rows: any[] = [];
+            for (const asn of assignments) {
+                if (asn.finalReview) {
+                    for (const sc of asn.finalReview.scores) {
+                        rows.push({
+                            assignmentId: asn.id,
+                            projectId: asn.projectId,
+                            projectTitle: asn.project.title,
+                            judgeUserId: asn.judgeUserId,
+                            judgeName: asn.judge.name || "",
+                            criterionId: sc.criterionId,
+                            criterionKey: sc.criterion.key,
+                            score: sc.value,
+                            weight: sc.criterion.weightBasisPts,
+                            maxValue: sc.criterion.maxScore
+                        });
+                    }
                 }
             }
+            csvStr = generateCSV(rows, [
+                { header: "Assignment ID", key: "assignmentId" },
+                { header: "Project ID", key: "projectId" },
+                { header: "Project Title", key: "projectTitle" },
+                { header: "Judge User ID", key: "judgeUserId" },
+                { header: "Judge Name", key: "judgeName" },
+                { header: "Criterion ID", key: "criterionId" },
+                { header: "Criterion Key", key: "criterionKey" },
+                { header: "Score", key: "score" },
+                { header: "Weight", key: "weight" },
+                { header: "Max Value", key: "maxValue" }
+            ]);
+        } else if (type === "diagnostics") {
+            const run = await prisma.calculationRun.findFirst({
+                where: { stageId: stageId! },
+                orderBy: { finishedAt: 'desc' },
+                include: { calibrations: { include: { judge: true } } }
+            });
+            if (!run) return new NextResponse("No calculations found", { status: 409 });
+            csvStr = generateCSV(run.calibrations, [
+                { header: "Run ID", key: () => run.id },
+                { header: "Judge User ID", key: "judgeUserId" },
+                { header: "Judge Name", key: (r) => r.judge.name || "" },
+                { header: "Review Count", key: "reviewCount" },
+                { header: "Offset (Bias)", key: "offset" }
+            ]);
+        } else if (type === "results") {
+            let run = null;
+            let finality = "PROVISIONAL";
+            if (stage.state === "FINALIZED") {
+                const snapshot = await prisma.finalizationSnapshot.findUnique({
+                    where: { stageId: stageId! }
+                });
+                if (snapshot) {
+                    run = await prisma.calculationRun.findUnique({
+                        where: { id: snapshot.calculationRunId },
+                        include: { projectResults: { include: { project: true } } }
+                    });
+                    finality = "SNAPSHOT";
+                }
+            } else if (stage.origin === "FIXTURE") {
+                run = await prisma.calculationRun.findFirst({
+                    where: { stageId: stageId!, status: "SUCCESS" },
+                    orderBy: { finishedAt: 'desc' },
+                    include: { projectResults: { include: { project: true } } }
+                });
+
+                if (!run) {
+                    const { generateCalculationPreview } = await import('@/lib/judging/calculation');
+                    try {
+                        const preview = await generateCalculationPreview(stageId!);
+                        if (preview.status === "SUCCESS" || preview.status === "SINGLE_JUDGE_UNCALIBRATED") {
+                            const projectIds = preview.results.map((r: any) => r.projectId);
+                            const projects = await prisma.project.findMany({ where: { id: { in: projectIds } } });
+                            const pMap = new Map(projects.map(p => [p.id, p.title]));
+                            
+                            run = {
+                                projectResults: preview.results.map((r: any) => ({
+                                    rank: r.rank,
+                                    projectId: r.projectId,
+                                    project: { title: pMap.get(r.projectId) || r.projectId },
+                                    reviewCount: r.reviewCount,
+                                    rawMean: r.rawMean,
+                                    normalizedMean: r.normalizedMean,
+                                    sd: r.sd
+                                }))
+                            } as any;
+                        }
+                    } catch (e) {
+                        // ignore preview errors
+                    }
+                }
+                finality = "HISTORICAL_ANALYSIS";
+            } else {
+                run = await prisma.calculationRun.findFirst({
+                    where: { stageId: stageId!, status: "SUCCESS" },
+                    orderBy: { finishedAt: 'desc' },
+                    include: { projectResults: { include: { project: true } } }
+                });
+            }
+            
+            if (!run) return new NextResponse("No valid calculation exists", { status: 409 });
+
+            const sorted: any[] = run.projectResults.sort((a: any, b: any) => (a.rank||0) - (b.rank||0));
+            csvStr = generateCSV(sorted, [
+                { header: "Finality", key: () => finality },
+                { header: "Rank", key: "rank" },
+                { header: "Project ID", key: "projectId" },
+                { header: "Project Title", key: (r: any) => r.project?.title || r.projectId },
+                { header: "Review Count", key: "reviewCount" },
+                { header: "Raw Mean", key: "rawMean" },
+                { header: "Normalized Mean", key: "normalizedMean" },
+                { header: "SD", key: (r: any) => r.sd != null ? r.sd.toFixed(2) : "0.00" }
+            ]);
+        } else {
+            return new NextResponse("Invalid export type", { status: 400 });
         }
-    } else if (type === "diagnostics") {
-        const run = await prisma.calculationRun.findFirst({
-            where: { stageId },
-            orderBy: { finishedAt: 'desc' },
-            include: { calibrations: true }
-        });
-        headers = ["Judge User ID", "Review Count", "Offset (Bias)"];
-        if (run) {
-            data = run.calibrations.map(c => [c.judgeUserId, c.reviewCount, c.offset]);
-        }
-    } else if (type === "results") {
-        const run = await prisma.calculationRun.findFirst({
-            where: { stageId },
-            orderBy: { finishedAt: 'desc' },
-            include: { projectResults: true }
-        });
-        headers = ["Rank", "Project ID", "Review Count", "Raw Mean", "Normalized Mean", "SD"];
-        if (run && (stage.state === "FINALIZED" || (stage.outputPolicy as any)?.isPublished)) {
-            const sorted = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0));
-            data = sorted.map(r => [r.rank, r.projectId, r.reviewCount, r.rawMean, r.normalizedMean, r.sd]);
-        } else if (run && stage.state !== "FINALIZED") {
-            // "Never label incomplete/calibration-unsupported scores final."
-            headers.push("WARNING");
-            data.push(["STAGE NOT FINALIZED. SCORES ARE PROVISIONAL OR INCOMPLETE."]);
-        }
-    } else {
-        return new NextResponse("Invalid export type", { status: 400 });
     }
 
-    const csvStr = toCsv([headers, ...data]);
-    return new NextResponse("\uFEFF" + csvStr, {
+    return new NextResponse(csvStr, {
         headers: {
             "Content-Type": "text/csv; charset=utf-8",
             "Cache-Control": "private, no-store",

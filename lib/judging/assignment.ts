@@ -1,30 +1,54 @@
 import { prisma } from "@/lib/db";
 import { advanceStageState } from "./state";
 import * as crypto from "crypto";
+import { AssignmentStatus } from "@prisma/client";
 
-// Simple deterministic PRNG (Mulberry32)
-function mulberry32(a: number) {
-    return function() {
-      var t = a += 0x6D2B79F5;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
-}
-
-function hashStringToInt(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
-    }
-    return hash;
-}
 
 export type AssignmentDiagnostic = 
     | { status: "VALID" }
     | { status: "INVALID_CONFIG", reason: string }
     | { status: "INFEASIBLE", reason: string }
     | { status: "CONSTRUCTION_FAILED", reason: string };
+
+function getComponents(judges: any[], projects: any[], assignments: any[]) {
+    const adj = new Map<string, Set<string>>();
+    for (const sj of judges) adj.set(sj.judgeUserId, new Set());
+
+    for (const sp of projects) {
+        const assignedToProject = assignments.filter((a: any) => a.projectId === sp.projectId).map((a: any) => a.judgeUserId);
+        for (let i = 0; i < assignedToProject.length; i++) {
+            for (let j = i + 1; j < assignedToProject.length; j++) {
+                adj.get(assignedToProject[i])!.add(assignedToProject[j]);
+                adj.get(assignedToProject[j])!.add(assignedToProject[i]);
+            }
+        }
+    }
+
+    const visited = new Set<string>();
+    const components: Set<string>[] = [];
+
+    for (const sj of judges) {
+        if (!visited.has(sj.judgeUserId)) {
+            const comp = new Set<string>();
+            const queue = [sj.judgeUserId];
+            visited.add(sj.judgeUserId);
+            comp.add(sj.judgeUserId);
+
+            while(queue.length > 0) {
+                const curr = queue.shift()!;
+                for (const neighbor of adj.get(curr)!) {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        comp.add(neighbor);
+                        queue.push(neighbor);
+                    }
+                }
+            }
+            components.push(comp);
+        }
+    }
+    return components;
+}
 
 export async function generateAssignmentPreview(stageId: string, txClient: any = prisma) {
     const stage = await txClient.judgingStage.findUnique({
@@ -61,7 +85,18 @@ export async function generateAssignmentPreview(stageId: string, txClient: any =
         });
     }
 
-    const stageJudges = activeJudges.map((j: any) => ({ judgeUserId: j.userId }));
+    const existingStageJudges = await txClient.stageJudge.findMany({
+        where: { stageId }
+    });
+    const capacityMap = new Map<string, number | null>();
+    for (const sj of existingStageJudges) {
+        if (sj.capacity !== null) capacityMap.set(sj.judgeUserId, sj.capacity);
+    }
+
+    const stageJudges = activeJudges.map((j: any) => ({ 
+        judgeUserId: j.userId,
+        capacity: capacityMap.get(j.userId)
+    }));
 
     const R = stage.requiredReviews;
     const N = stageProjects.length;
@@ -98,26 +133,28 @@ export async function generateAssignmentPreview(stageId: string, txClient: any =
         return { diagnostic: { status: "INFEASIBLE", reason: `R (${R}) is greater than active panel size (${J})` } };
     }
 
-    const seed = hashStringToInt(stageId + stageProjects.map((p: any)=>p.projectId).join("") + stageJudges.map((j: any)=>j.judgeUserId).join(""));
-    const prng = mulberry32(seed);
-
     let assignments: { projectId: string, judgeUserId: string }[] = [];
     const judgeLoads = new Map<string, number>();
     for (const sj of stageJudges) judgeLoads.set(sj.judgeUserId, 0);
 
     for (const sp of stageProjects) {
-        const eligibleJudges = stageJudges.filter((sj: any) => !conflicts.has(`${sp.projectId}:${sj.judgeUserId}`));
+        const eligibleJudges = stageJudges.filter((sj: any) => 
+            !conflicts.has(`${sp.projectId}:${sj.judgeUserId}`) && 
+            judgeLoads.get(sj.judgeUserId)! < (sj.capacity !== undefined && sj.capacity !== null ? sj.capacity : maxCapacity)
+        );
         
         eligibleJudges.sort((a: any, b: any) => {
             const loadA = judgeLoads.get(a.judgeUserId)!;
             const loadB = judgeLoads.get(b.judgeUserId)!;
             if (loadA !== loadB) return loadA - loadB;
-            return prng() - 0.5;
+            const hashA = crypto.createHash("sha256").update(sp.projectId + ":" + a.judgeUserId).digest("hex");
+            const hashB = crypto.createHash("sha256").update(sp.projectId + ":" + b.judgeUserId).digest("hex");
+            return hashA.localeCompare(hashB);
         });
 
         const selected = eligibleJudges.slice(0, R);
         if (selected.length < R) {
-            return { diagnostic: { status: "CONSTRUCTION_FAILED", reason: `Greedy construction failed to find ${R} judges for ${sp.projectId} (conflicts/capacity)` } };
+            return { diagnostic: { status: "INFEASIBLE", reason: `Greedy construction failed to find ${R} judges for ${sp.projectId} (conflicts/capacity)` } };
         }
 
         for (const sj of selected) {
@@ -126,40 +163,55 @@ export async function generateAssignmentPreview(stageId: string, txClient: any =
         }
     }
 
-    let isConnected = true;
     if (J > 1 && R > 1) {
-        const adj = new Map<string, Set<string>>();
-        for (const sj of stageJudges) adj.set(sj.judgeUserId, new Set());
+        let components = getComponents(stageJudges, stageProjects, assignments);
+        let maxSwaps = 50; 
+        let swapsDone = 0;
 
-        for (const sp of stageProjects) {
-            const assignedToProject = assignments.filter((a: any) => a.projectId === sp.projectId).map((a: any) => a.judgeUserId);
-            for (let i = 0; i < assignedToProject.length; i++) {
-                for (let j = i + 1; j < assignedToProject.length; j++) {
-                    adj.get(assignedToProject[i])!.add(assignedToProject[j]);
-                    adj.get(assignedToProject[j])!.add(assignedToProject[i]);
+        while (components.length > 1 && swapsDone < maxSwaps) {
+            let swapped = false;
+            const compA = components[0];
+            const compB = components[1];
+
+            const edgesA = assignments.filter(a => compA.has(a.judgeUserId));
+            const edgesB = assignments.filter(a => compB.has(a.judgeUserId));
+
+            for (const eA of edgesA) {
+                for (const eB of edgesB) {
+                    const p1 = eA.projectId;
+                    const j1 = eA.judgeUserId;
+                    const p2 = eB.projectId;
+                    const j2 = eB.judgeUserId;
+
+                    if (conflicts.has(`${p1}:${j2}`) || conflicts.has(`${p2}:${j1}`)) continue;
+                    
+                    if (assignments.some(a => a.projectId === p1 && a.judgeUserId === j2)) continue;
+                    if (assignments.some(a => a.projectId === p2 && a.judgeUserId === j1)) continue;
+
+                    eA.judgeUserId = j2;
+                    eB.judgeUserId = j1;
+                    swapped = true;
+                    break;
                 }
+                if (swapped) break;
             }
+
+            if (!swapped) {
+                return { diagnostic: { status: "CONSTRUCTION_FAILED", reason: "Overlap graph is disconnected and could not be repaired." } };
+            }
+
+            swapsDone++;
+            components = getComponents(stageJudges, stageProjects, assignments);
         }
 
-        const visited = new Set<string>();
-        const queue = [stageJudges[0].judgeUserId];
-        visited.add(stageJudges[0].judgeUserId);
-
-        while(queue.length > 0) {
-            const curr = queue.shift()!;
-            for (const neighbor of adj.get(curr)!) {
-                if (!visited.has(neighbor)) {
-                    visited.add(neighbor);
-                    queue.push(neighbor);
-                }
-            }
-        }
-
-        const assignedJudges = new Set(assignments.map((a: any) => a.judgeUserId));
-        if (visited.size < assignedJudges.size) {
-            return { diagnostic: { status: "CONSTRUCTION_FAILED", reason: "Overlap graph is disconnected, blocking calibration." } };
+        if (components.length > 1) {
+            return { diagnostic: { status: "CONSTRUCTION_FAILED", reason: "Overlap graph is still disconnected after maximum repair swaps." } };
         }
     }
+
+    // Recompute loads after swaps just to be safe
+    for (const sj of stageJudges) judgeLoads.set(sj.judgeUserId, 0);
+    for (const a of assignments) judgeLoads.set(a.judgeUserId, judgeLoads.get(a.judgeUserId)! + 1);
 
     const configHash = crypto.createHash("sha256").update(JSON.stringify({ R, stageId, maxCapacity })).digest("hex");
     const inputHash = crypto.createHash("sha256").update(JSON.stringify({ 
@@ -213,13 +265,21 @@ export async function commitAssignmentRun(stageId: string, actorId: string, conf
         }
 
         // Snapshot population
-        await tx.stageJudge.deleteMany({ where: { stageId } });
         await tx.stageProject.deleteMany({ where: { stageId } });
 
-        await tx.stageJudge.createMany({
-            data: preview.stageJudges!.map((sj: any) => ({
-                stageId, judgeUserId: sj.judgeUserId, isActive: true
-            }))
+        for (const sj of preview.stageJudges!) {
+            await tx.stageJudge.upsert({
+                where: { stageId_judgeUserId: { stageId, judgeUserId: sj.judgeUserId } },
+                update: { isActive: true },
+                create: { stageId, judgeUserId: sj.judgeUserId, isActive: true }
+            });
+        }
+        
+        // Mark others inactive (optional, but good for cleanliness)
+        const activeUserIds = preview.stageJudges!.map((sj: any) => sj.judgeUserId);
+        await tx.stageJudge.updateMany({
+            where: { stageId, judgeUserId: { notIn: activeUserIds } },
+            data: { isActive: false }
         });
 
         await tx.stageProject.createMany({
@@ -252,7 +312,7 @@ export async function commitAssignmentRun(stageId: string, actorId: string, conf
             projectId: a.projectId,
             judgeUserId: a.judgeUserId,
             runId: run.id,
-            status: "PENDING"
+            status: AssignmentStatus.PENDING
         }));
 
         await tx.rubricAssignment.createMany({

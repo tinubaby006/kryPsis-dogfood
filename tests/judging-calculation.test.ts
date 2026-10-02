@@ -1,139 +1,158 @@
 import { describe, it, expect } from 'vitest';
-import { calculateWeightedWLS } from '../lib/judging/calculation';
+import { pairOverlapWLS_v3 } from '../lib/judging/calculation';
 
-describe('calculateWeightedWLS', () => {
-    const defaultR = 2;
-
-    it('raw score72; bias toy +10/-10 and means70/50', () => {
-        // Two projects p1 and p2, two judges j1 and j2.
-        // j1 is tough (bias -10), j2 is lenient (bias +10).
-        // p1 true mean 70, p2 true mean 50.
-        // j1 gives p1 60 (70-10), gives p2 40 (50-10).
-        // j2 gives p1 80 (70+10), gives p2 60 (50+10).
+describe('pairOverlapWLS_v3', () => {
+    it('reference uneven dataset', () => {
+        // | Project | Judge a | Judge b | Judge c |
+        // | p1      | 60      | 80      | missing |
+        // | p2      | 40      | 50      | 90      |
+        // | p3      | 20      | missing | 70      |
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 60 },
-            { projectId: 'p1', judgeId: 'j2', rawScore: 80 },
-            { projectId: 'p2', judgeId: 'j1', rawScore: 40 },
-            { projectId: 'p2', judgeId: 'j2', rawScore: 60 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 60 },
+            { projectId: 'p1', judgeId: 'b', rawScore: 80 },
+            { projectId: 'p2', judgeId: 'a', rawScore: 40 },
+            { projectId: 'p2', judgeId: 'b', rawScore: 50 },
+            { projectId: 'p2', judgeId: 'c', rawScore: 90 },
+            { projectId: 'p3', judgeId: 'a', rawScore: 20 },
+            { projectId: 'p3', judgeId: 'c', rawScore: 70 },
         ];
-        const judges = ['j1', 'j2'];
-        const projects = ['p1', 'p2'];
-        const stageProjects = [{projectId: 'p1'}, {projectId: 'p2'}];
+        const judges = ['a', 'b', 'c'];
+        const projects = ['p1', 'p2', 'p3'];
+        const stageProjects = [{projectId: 'p1'}, {projectId: 'p2'}, {projectId: 'p3'}];
 
-        const res = calculateWeightedWLS(reviews, judges, projects, stageProjects, 2);
+        const res = pairOverlapWLS_v3(reviews, judges, projects, stageProjects, 2, 'FIXTURE');
         
         expect(res.status).toBe('SUCCESS');
         expect(res.isConnected).toBe(true);
 
-        const p1Res = res.results.find(r => r.projectId === 'p1');
-        const p2Res = res.results.find(r => r.projectId === 'p2');
-        
-        expect(p1Res?.normalizedMean).toBeCloseTo(70, 4);
-        expect(p2Res?.normalizedMean).toBeCloseTo(50, 4);
+        const pa = res.calibrations.find(c => c.judgeUserId === 'a')!;
+        const pb = res.calibrations.find(c => c.judgeUserId === 'b')!;
+        const pc = res.calibrations.find(c => c.judgeUserId === 'c')!;
+        expect(pa.offset).toBeCloseTo(-21.66666666666667, 6);
+        expect(pb.offset).toBeCloseTo(-7.916666666666668, 6);
+        expect(pc.offset).toBeCloseTo(29.58333333333333, 6);
 
-        const j1Cal = res.calibrations.find(c => c.judgeUserId === 'j1');
-        const j2Cal = res.calibrations.find(c => c.judgeUserId === 'j2');
-        expect(j1Cal?.offset).toBeCloseTo(-10, 4);
-        expect(j2Cal?.offset).toBeCloseTo(10, 4);
+        const p1 = res.results.find(r => r.projectId === 'p1')!;
+        const p2 = res.results.find(r => r.projectId === 'p2')!;
+        const p3 = res.results.find(r => r.projectId === 'p3')!;
+        
+        expect(p1.normalizedMean).toBeCloseTo(84.79166666666667, 6);
+        expect(p2.normalizedMean).toBeCloseTo(60, 6);
+        expect(p3.normalizedMean).toBeCloseTo(41.04166666666667, 6);
+
+        expect(p1.sd).toBeCloseTo(4.419417382415922, 6);
+        expect(p2.sd).toBeCloseTo(1.9094065395649333, 6);
+        expect(p3.sd).toBeCloseTo(0.8838834764831844, 6);
     });
 
-    it('disconnected unsupported', () => {
-        // j1 reviews p1, p2. j2 reviews p3, p4. No overlap.
+    it('disconnected graph returns UNSUPPORTED', () => {
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 60 },
-            { projectId: 'p2', judgeId: 'j1', rawScore: 80 },
-            { projectId: 'p3', judgeId: 'j2', rawScore: 40 },
-            { projectId: 'p4', judgeId: 'j2', rawScore: 60 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 60 },
+            { projectId: 'p2', judgeId: 'a', rawScore: 80 },
+            { projectId: 'p3', judgeId: 'b', rawScore: 40 },
+            { projectId: 'p4', judgeId: 'b', rawScore: 60 },
         ];
-        const res = calculateWeightedWLS(reviews, ['j1', 'j2'], ['p1', 'p2', 'p3', 'p4'], [{projectId: 'p1'}, {projectId: 'p2'}, {projectId: 'p3'}, {projectId: 'p4'}], 1);
+        const res = pairOverlapWLS_v3(reviews, ['a', 'b'], ['p1', 'p2', 'p3', 'p4'], [{projectId: 'p1'}, {projectId: 'p2'}, {projectId: 'p3'}, {projectId: 'p4'}], 1, 'FIXTURE');
         expect(res.status).toBe('UNSUPPORTED');
         expect(res.isConnected).toBe(false);
     });
 
-    it('zero-review project', () => {
-        const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 60 },
-            { projectId: 'p1', judgeId: 'j2', rawScore: 80 },
-        ];
-        // p2 has 0 reviews, requiring R=2
-        const res = calculateWeightedWLS(reviews, ['j1', 'j2'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 2);
+    it('no evidence returns INCOMPLETE_EVIDENCE', () => {
+        const res = pairOverlapWLS_v3([], ['a'], ['p1'], [{projectId: 'p1'}], 1, 'FIXTURE');
         expect(res.status).toBe('INCOMPLETE_EVIDENCE');
     });
 
-    it('uneven m', () => {
+    it('single judge returns SINGLE_JUDGE_UNCALIBRATED', () => {
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 60 },
-            { projectId: 'p1', judgeId: 'j2', rawScore: 80 },
-            { projectId: 'p2', judgeId: 'j1', rawScore: 60 },
-            // p2 only has 1 review, requiring R=1 so it passes
+            { projectId: 'p1', judgeId: 'a', rawScore: 60 },
+            { projectId: 'p2', judgeId: 'a', rawScore: 80 }
         ];
-        const res = calculateWeightedWLS(reviews, ['j1', 'j2'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 1);
-        expect(res.status).toBe('SUCCESS');
-        
-        const p1Res = res.results.find(r => r.projectId === 'p1');
-        const p2Res = res.results.find(r => r.projectId === 'p2');
-        expect(p1Res?.reviewCount).toBe(2);
-        expect(p2Res?.reviewCount).toBe(1);
+        const res = pairOverlapWLS_v3(reviews, ['a'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 1, 'FIXTURE');
+        expect(res.status).toBe('SINGLE_JUDGE_UNCALIBRATED');
+        expect(res.calibrations.find(c => c.judgeUserId === 'a')!.offset).toBe(0);
+        expect(res.results.find(r => r.projectId === 'p1')!.normalizedMean).toBe(60);
     });
 
-    it('m1 SD null', () => {
+    it('exact R coverage requirement for LIVE', () => {
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 60 },
-            { projectId: 'p2', judgeId: 'j1', rawScore: 60 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 50 },
+            { projectId: 'p1', judgeId: 'b', rawScore: 50 },
+            { projectId: 'p2', judgeId: 'a', rawScore: 50 },
         ];
-        const res = calculateWeightedWLS(reviews, ['j1'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 1);
-        expect(res.status).toBe('SUCCESS');
-        const p1Res = res.results.find(r => r.projectId === 'p1');
-        expect(p1Res?.sd).toBeNull();
+        const res = pairOverlapWLS_v3(reviews, ['a', 'b'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 2, 'LIVE');
+        expect(res.status).toBe('INCOMPLETE_EVIDENCE');
+        expect(res.reason).toMatch(/Project p2 has 1 reviews, exactly 2 required/);
     });
 
-    it('means101 vs100.5 retain order', () => {
+    it('excess R returns INCOMPLETE_EVIDENCE for LIVE', () => {
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 101 }, // Unclamped can go above 100 via biases, but here raw is 101
-            { projectId: 'p2', judgeId: 'j1', rawScore: 100.5 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 50 },
+            { projectId: 'p1', judgeId: 'b', rawScore: 50 },
+            { projectId: 'p1', judgeId: 'c', rawScore: 50 },
         ];
-        const res = calculateWeightedWLS(reviews, ['j1'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 1);
-        expect(res.status).toBe('SUCCESS');
-        
-        const p1Res = res.results.find(r => r.projectId === 'p1');
-        const p2Res = res.results.find(r => r.projectId === 'p2');
-        
-        expect(p1Res?.normalizedMean).toBeCloseTo(101);
-        expect(p1Res?.displayedMean).toBe(100);
-        
-        expect(p2Res?.normalizedMean).toBeCloseTo(100.5);
-        expect(p2Res?.displayedMean).toBe(100);
-        
-        // p1 should rank higher than p2
-        expect((p1Res as any).rank).toBeLessThan((p2Res as any).rank);
+        const res = pairOverlapWLS_v3(reviews, ['a', 'b', 'c'], ['p1'], [{projectId: 'p1'}], 2, 'LIVE');
+        expect(res.status).toBe('INCOMPLETE_EVIDENCE');
+        expect(res.reason).toMatch(/Project p1 has 3 reviews, exactly 2 required/);
     });
 
-    it('ties deterministic', () => {
+    it('one review SD is null, identical reviews SD is 0', () => {
         const reviews = [
-            { projectId: 'pA', judgeId: 'j1', rawScore: 50 },
-            { projectId: 'pB', judgeId: 'j1', rawScore: 50 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 50 },
+            { projectId: 'p2', judgeId: 'a', rawScore: 60 },
+            { projectId: 'p2', judgeId: 'b', rawScore: 60 },
         ];
-        // pA and pB have exact same normalized and raw mean
-        const res = calculateWeightedWLS(reviews, ['j1'], ['pA', 'pB'], [{projectId: 'pA'}, {projectId: 'pB'}], 1);
+        // For p2, if judge 'a' and 'b' have exactly 0 bias, their calibrated scores are 60,60 so variance is 0.
+        const res = pairOverlapWLS_v3(reviews, ['a', 'b'], ['p1', 'p2'], [{projectId: 'p1'}, {projectId: 'p2'}], 1, 'FIXTURE');
         
-        const res2 = calculateWeightedWLS(reviews.slice().reverse(), ['j1'], ['pB', 'pA'], [{projectId: 'pA'}, {projectId: 'pB'}], 1);
+        const p1 = res.results.find(r => r.projectId === 'p1')!;
+        const p2 = res.results.find(r => r.projectId === 'p2')!;
         
-        const pARank1 = (res.results.find(r => r.projectId === 'pA') as any).rank;
-        const pARank2 = (res2.results.find(r => r.projectId === 'pA') as any).rank;
-        
-        expect(pARank1).toBe(pARank2);
-        
-        // They should not have the same rank as each other
-        const pBRank1 = (res.results.find(r => r.projectId === 'pB') as any).rank;
-        expect(pARank1).not.toBe(pBRank1);
+        expect(p1.sd).toBeNull();
+        expect(p2.sd).toBe(0);
     });
 
-    it('exact R', () => {
+    it('normalized means above 100 rank before display clipping', () => {
+        // Judge b is very lenient, Judge a is normal
         const reviews = [
-            { projectId: 'p1', judgeId: 'j1', rawScore: 50 },
-            { projectId: 'p1', judgeId: 'j2', rawScore: 50 },
+            { projectId: 'p1', judgeId: 'a', rawScore: 80 },
+            { projectId: 'p1', judgeId: 'b', rawScore: 100 },
+            
+            { projectId: 'p2', judgeId: 'b', rawScore: 100 }, // b gave 100, but a didn't review. Since b is lenient, b's bias is positive. So calibrated score is < 100. Wait, actually if b is lenient, p2's raw is 100, offset is say 10, calibrated is 90.
+            
+            // Wait, let's just make the raw score manually > 100 (though validation usually prevents it, calculation should handle it correctly)
+            { projectId: 'p3', judgeId: 'a', rawScore: 105 },
+            { projectId: 'p4', judgeId: 'a', rawScore: 102 },
         ];
-        const res = calculateWeightedWLS(reviews, ['j1', 'j2'], ['p1'], [{projectId: 'p1'}], 2);
-        expect(res.status).toBe('SUCCESS');
+        const res = pairOverlapWLS_v3(reviews, ['a', 'b'], ['p1', 'p2', 'p3', 'p4'], [{projectId: 'p1'}, {projectId: 'p2'}, {projectId: 'p3'}, {projectId: 'p4'}], 1, 'FIXTURE');
+        
+        const p3 = res.results.find(r => r.projectId === 'p3')!;
+        const p4 = res.results.find(r => r.projectId === 'p4')!;
+        
+        expect(p3.displayedMean).toBe(100);
+        expect(p4.displayedMean).toBe(100);
+        
+        expect(p3.normalizedMean).toBeGreaterThan(100);
+        expect(p4.normalizedMean).toBeGreaterThan(100);
+        
+        // p3 should be ranked better than p4
+        expect((p3 as any).rank).toBeLessThan((p4 as any).rank);
+    });
+
+    it('exact ties are broken deterministically using tie-v3 hash', () => {
+        const reviews = [
+            { projectId: 'A', judgeId: 'a', rawScore: 50 },
+            { projectId: 'B', judgeId: 'a', rawScore: 50 },
+        ];
+        const res = pairOverlapWLS_v3(reviews, ['a'], ['A', 'B'], [{projectId: 'A'}, {projectId: 'B'}], 1, 'FIXTURE');
+        
+        const res2 = pairOverlapWLS_v3(reviews.slice().reverse(), ['a'], ['B', 'A'], [{projectId: 'B'}, {projectId: 'A'}], 1, 'FIXTURE');
+        
+        const aRank1 = (res.results.find(r => r.projectId === 'A') as any).rank;
+        const aRank2 = (res2.results.find(r => r.projectId === 'A') as any).rank;
+        
+        expect(aRank1).toBe(aRank2);
+        
+        const bRank1 = (res.results.find(r => r.projectId === 'B') as any).rank;
+        expect(aRank1).not.toBe(bRank1);
     });
 });

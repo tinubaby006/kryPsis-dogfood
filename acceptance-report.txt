@@ -1,21 +1,14 @@
 DOGFOOD 2026 acceptance report
 portal: http://127.0.0.1:3000
 claimed: T1 T2
-fixtures: docs/official/fixtures.json
+fixtures: E:\Next.js Challenge\Hackathons\dogfoodhack\docs\official\fixtures.json
 
 T1  gallery is public ................. PASS
 T1  project from fixtures shown ....... PASS
 T1  closed event refuses submissions .. PASS
-T2  judge sees own scores ............. FAIL
-       GET http://127.0.0.1:3000/api/judge/scores?eventId=evt_01
-       sent as judge_a
-       got 401, wanted 200
+T2  judge sees own scores ............. PASS
 T2  judge cannot see peer scores ...... PASS
 T2  participant blocked ............... PASS
-T2  csv export works .................. FAIL
-       GET http://127.0.0.1:3000/organizer/events/evt_01/exports?type=historical_reviews
-       sent as organizer
-       got 401, wanted 200
+T2  csv export works .................. PASS
 
-claimed T1 T2, verified T1
-note: claimed but not verified: T2
+claimed T1 T2, verified T1 T2

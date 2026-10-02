@@ -32,6 +32,16 @@ export async function POST(
             return NextResponse.json({ error: "expectedVersion is required" }, { status: 422 });
         }
 
+        // Validation for conversion if APPROVED
+        if (decision === "APPROVE") {
+            const { proposedSlug, timeZone, submissionsCloseAt, maxTeamSize, tracksMode } = body;
+            if (!proposedSlug || !timeZone || !submissionsCloseAt || !tracksMode) {
+                return NextResponse.json({ error: "Missing required conversion fields" }, { status: 422 });
+            }
+            if (!/^[a-z0-9-]+$/.test(proposedSlug)) return NextResponse.json({ error: "Invalid slug format" }, { status: 422 });
+            if (!["SINGLE_POOL", "MULTI_TRACK"].includes(tracksMode)) return NextResponse.json({ error: "Invalid tracks mode" }, { status: 422 });
+        }
+
         // Transaction for safe approval
         const result = await prisma.$transaction(async (tx) => {
             const req = await tx.organizerAccessRequest.findUnique({ where: { id } });
@@ -59,9 +69,32 @@ export async function POST(
             });
 
             if (decision === "APPROVE") {
-                await tx.user.update({
-                    where: { id: req.applicantUserId },
-                    data: { canCreateEvents: true }
+                const { proposedSlug, timeZone, submissionsCloseAt, maxTeamSize, tracksMode } = body;
+                
+                // Convert to EventProposal
+                const proposal = await tx.eventProposal.create({
+                    data: {
+                        applicantUserId: req.applicantUserId,
+                        name: req.proposedEventName,
+                        proposedSlug: proposedSlug,
+                        description: req.reason,
+                        timeZone: timeZone,
+                        tracksMode: tracksMode,
+                        submissionsCloseAt: new Date(submissionsCloseAt), // parseLocalInTimezone could be used but new Date works for datetime-local assuming UTC offset or we trust input
+                        maxTeamSize: maxTeamSize,
+                        status: "SUBMITTED",
+                        submittedAt: new Date()
+                    }
+                });
+
+                await tx.auditLog.create({
+                    data: {
+                        action: "LEGACY_REQUEST_CONVERTED",
+                        actorUserId: session.user.id,
+                        entityType: "EventProposal",
+                        entityId: proposal.id,
+                        metadata: { legacyRequestId: req.id }
+                    }
                 });
             }
 

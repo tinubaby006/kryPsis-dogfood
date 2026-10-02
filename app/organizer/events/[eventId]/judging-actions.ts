@@ -7,15 +7,11 @@ import { advanceStageState } from "@/lib/judging/state";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
 
+import { requireEventOrganizer } from "@/lib/permissions";
+
 async function requireOrganizer(eventId: string) {
-    const session = await getSession();
-    if (!session?.user) throw new Error("Unauthorized");
-    const role = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
-    if (!role && !adminUser?.isPlatformAdmin) throw new Error("Forbidden");
-    return session.user.id;
+    const user = await requireEventOrganizer(eventId);
+    return user.id;
 }
 
 export async function createOrUpdateJudgingStage(eventId: string, data: any) {
@@ -226,39 +222,56 @@ export async function closeJudgingStage(eventId: string, stageId: string) {
 export async function finalizeCalculation(eventId: string, stageId: string, calculationRunId: string) {
     const userId = await requireOrganizer(eventId);
     try {
-        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
-        if (!stage) return { error: "Stage not found" };
-        if (stage.state !== "CALCULATED") return { error: "Stage must be CALCULATED to finalize" };
+        const result = await prisma.$transaction(async (tx) => {
+            const stage = await tx.judgingStage.findUnique({ where: { id: stageId, eventId } });
+            if (!stage) throw new Error("Stage not found");
+            
+            await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "JudgingStage" WHERE id = ${stageId} FOR UPDATE`;
 
-        const run = await prisma.calculationRun.findUnique({
-            where: { id: calculationRunId, stageId },
-            include: { projectResults: true }
-        });
-        if (!run) return { error: "Calculation run not found" };
-        if (run.status !== "SUCCESS") return { error: "Cannot finalize an unsuccessful calculation run." };
+            const currentStage = await tx.judgingStage.findUnique({ where: { id: stageId } });
+            if (!currentStage) throw new Error("Stage not found");
 
-        const { generateCalculationPreview } = await import('@/lib/judging/calculation');
-        const preview = await generateCalculationPreview(stageId);
-        
-        if (preview.inputHash !== run.inputHash || preview.configHash !== run.configHash) {
-            return { error: "Stale finalization: Evidence or configuration has changed since this calculation run. Please recalculate." };
-        }
-        
-        if (preview.status !== "SUCCESS") {
-            return { error: `Cannot finalize: Current state is unsupported (${preview.status}).` };
-        }
+            const existingSnapshot = await tx.finalizationSnapshot.findUnique({ where: { stageId } });
+            
+            if (currentStage.state === "FINALIZED" || existingSnapshot) {
+                if (existingSnapshot && existingSnapshot.calculationRunId === calculationRunId) {
+                    return { success: true, message: "Idempotent return: Already finalized with this run." };
+                } else {
+                    throw new Error("Conflict: Stage is already finalized with a different calculation run.");
+                }
+            }
 
-        const pending = await prisma.rubricAssignment.count({
-            where: { stageId, status: "PENDING" }
-        });
-        if (pending > 0) {
-            return { error: `Cannot finalize: ${pending} assignments are still pending.` };
-        }
+            if (currentStage.state !== "CALCULATED") throw new Error("Stage must be CALCULATED to finalize");
 
-        const canonicalHashStr = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0)).map(r => `${r.projectId}:${r.normalizedMean}`).join(",");
-        const canonicalHash = crypto.createHash("sha256").update(canonicalHashStr).digest("hex");
+            const run = await tx.calculationRun.findUnique({
+                where: { id: calculationRunId, stageId },
+                include: { projectResults: true }
+            });
+            if (!run) throw new Error("Calculation run not found");
+            if (run.status !== "SUCCESS") throw new Error("Cannot finalize an unsuccessful calculation run.");
 
-        await prisma.$transaction(async (tx) => {
+            const { generateCalculationPreview } = await import('@/lib/judging/calculation');
+            const preview = await generateCalculationPreview(stageId);
+            
+            if (preview.inputHash !== run.inputHash || preview.configHash !== run.configHash) {
+                throw new Error("Stale finalization: Evidence or configuration has changed since this calculation run. Please recalculate.");
+            }
+            
+            if (preview.status !== "SUCCESS") {
+                throw new Error(`Cannot finalize: Current state is unsupported (${preview.status}).`);
+            }
+
+            const pending = await tx.rubricAssignment.count({
+                where: { stageId, status: "PENDING" }
+            });
+            if (pending > 0) {
+                throw new Error(`Cannot finalize: ${pending} assignments are still pending.`);
+            }
+
+            const canonicalHashStr = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0)).map(r => `${r.projectId}:${r.normalizedMean}`).join(",");
+            const canonicalHash = crypto.createHash("sha256").update(canonicalHashStr).digest("hex");
+
             await tx.finalizationSnapshot.create({
                 data: {
                     stageId,
@@ -282,10 +295,11 @@ export async function finalizeCalculation(eventId: string, stageId: string, calc
                 where: { id: stageId },
                 data: { state: "FINALIZED" }
             });
-        });
 
+            return { success: true };
+        });
         revalidatePath(`/organizer/events/${eventId}`);
-        return { success: true };
+        return result;
     } catch (e: any) {
         return { error: e.message };
     }
@@ -393,31 +407,81 @@ export async function getStageProgress(eventId: string, stageId: string) {
     }
 }
 
+export async function getPersistedCalculationAction(eventId: string, stageId: string) {
+    await requireOrganizer(eventId);
+    try {
+        const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
+        if (!stage) return { error: "Stage not found" };
+
+        if (stage.state === "FINALIZED" && stage.publishedSnapshotId) {
+            const snapshot = await prisma.finalizationSnapshot.findUnique({
+                where: { id: stage.publishedSnapshotId }
+            });
+            if (snapshot) {
+                const run = await prisma.calculationRun.findUnique({
+                    where: { id: snapshot.calculationRunId },
+                    include: { calibrations: true, projectResults: true }
+                });
+                if (run) {
+                    const results = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0));
+                    return { success: true, run, results, stageState: stage.state, isPublished: true, snapshotData: snapshot.snapshotData };
+                }
+            }
+        }
+
+        // Wait, if it's FINALIZED but not published, it still has a snapshot (just not in publishedSnapshotId)?
+        // Wait, publishedSnapshotId is set ON publish? Let me check schema.
+        // Actually, schema has publishedSnapshotId on JudgingStage.
+        // Let's get the latest FinalizationSnapshot for the stage if FINALIZED.
+        if (stage.state === "FINALIZED") {
+            const snapshot = await prisma.finalizationSnapshot.findUnique({ where: { stageId } });
+            if (snapshot) {
+                const run = await prisma.calculationRun.findUnique({
+                    where: { id: snapshot.calculationRunId },
+                    include: { calibrations: true, projectResults: true }
+                });
+                if (run) {
+                    const results = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0));
+                    return { success: true, run, results, stageState: stage.state, isPublished: !!stage.publishedSnapshotId, snapshotData: snapshot.snapshotData };
+                }
+            }
+        }
+
+        if (stage.state === "CALCULATED") {
+            const run = await prisma.calculationRun.findFirst({
+                where: { stageId, status: "SUCCESS" },
+                orderBy: { finishedAt: 'desc' },
+                include: { calibrations: true, projectResults: true }
+            });
+            if (run) {
+                const results = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0));
+                return { success: true, run, results, stageState: stage.state };
+            }
+        }
+        
+        return { error: "No persisted calculation available for current state" };
+    } catch (e: any) {
+        return { error: e.message };
+    }
+}
+
 export async function publishStageAction(eventId: string, stageId: string) {
     const userId = await requireOrganizer(eventId);
     try {
         const stage = await prisma.judgingStage.findUnique({ where: { id: stageId, eventId } });
         if (!stage) return { error: "Stage not found" };
         
-        if (stage.state === "CALCULATED") {
-            const run = await prisma.calculationRun.findFirst({
-                where: { stageId },
-                orderBy: { finishedAt: 'desc' }
-            });
-            if (!run) return { error: "No calculation run found to finalize" };
-            const finRes = await finalizeCalculation(eventId, stageId, run.id);
-            if (finRes.error) return finRes;
-        } else if (stage.state !== "FINALIZED") {
-            return { error: "Stage must be CALCULATED or FINALIZED before publishing" };
+        if (stage.state !== "FINALIZED") {
+            return { error: "Stage must be FINALIZED before publishing" };
         }
+
+        const snapshot = await prisma.finalizationSnapshot.findUnique({ where: { stageId } });
+        if (!snapshot) return { error: "No finalization snapshot found to publish" };
 
         await prisma.judgingStage.update({
             where: { id: stageId },
             data: { 
-                outputPolicy: { 
-                    ...(stage.outputPolicy ? (stage.outputPolicy as object) : {}), 
-                    isPublished: true 
-                } 
+                publishedSnapshotId: snapshot.id
             }
         });
         revalidatePath(`/organizer/events/${eventId}`);
@@ -491,21 +555,31 @@ export async function repairJudgeDropoutAction(eventId: string, stageId: string,
                     throw new Error(`INFEASIBLE: No eligible replacement found for project ${asn.projectId}. Cannot satisfy parity/R.`);
                 }
 
-                // Pick the replacement judge with the fewest current assignments (greedy capacity check)
+                // Pick the replacement judge deterministically
                 let bestJudge = null;
                 let minLoad = Infinity;
+                let minHash = "";
+
                 for (const j of eligibleJudges) {
                     const load = await tx.rubricAssignment.count({
                         where: { stageId, judgeUserId: j.judgeUserId, status: { not: "CANCELLED" } }
                     });
-                    if (load < minLoad) {
+
+                    // Check individual capacity if present
+                    const maxCap = j.capacity !== null ? j.capacity : Infinity; // If global, we'd need to compute it. For repair, we just avoid exceeding custom capacity if present, or let load balance.
+                    if (j.capacity !== null && load >= j.capacity) continue;
+
+                    const hash = crypto.createHash("sha256").update(asn.projectId + ":" + j.judgeUserId).digest("hex");
+
+                    if (load < minLoad || (load === minLoad && hash < minHash)) {
                         minLoad = load;
+                        minHash = hash;
                         bestJudge = j.judgeUserId;
                     }
                 }
 
                 if (!bestJudge) {
-                    throw new Error(`INFEASIBLE: Unable to assign project ${asn.projectId} safely.`);
+                    throw new Error(`INFEASIBLE: Unable to assign project ${asn.projectId} safely without exceeding capacity or conflicts.`);
                 }
 
                 // Cancel the original

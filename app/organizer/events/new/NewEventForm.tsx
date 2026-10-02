@@ -21,13 +21,16 @@ export function NewEventForm() {
             description: formData.get("description") as string,
             submissionsCloseAt: formData.get("submissionsCloseAt") as string,
             maxTeamSize: parseInt(formData.get("maxTeamSize") as string || "4"),
-            timeZone: (formData.get("timeZone") as string) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+            timeZone: (formData.get("timeZone") as string) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            tracksMode: (formData.get("tracksMode") as "SINGLE_POOL" | "MULTI_TRACK") || "SINGLE_POOL"
         };
 
         const res = await createProposal(data);
-        if (res.error) {
-            setError(res.error);
+        const response = res as any;
+        if (!response.success) {
+            setError(response.error || response.message || "Error");
             setLoading(false);
+        } else {
             router.push(`/dashboard`);
         }
     }
@@ -65,9 +68,18 @@ export function NewEventForm() {
                 </div>
             </div>
 
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">Max Team Size</label>
-                <input required type="number" name="maxTeamSize" min="1" max="20" defaultValue="4" className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">Max Team Size</label>
+                    <input required type="number" name="maxTeamSize" min="1" max="20" defaultValue="4" className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">Tracks Mode</label>
+                    <select name="tracksMode" defaultValue="SINGLE_POOL" className="w-full bg-background border border-border text-foreground rounded-md p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="SINGLE_POOL">Single Pool</option>
+                        <option value="MULTI_TRACK">Multiple Tracks</option>
+                    </select>
+                </div>
             </div>
 
             <div className="pt-2">

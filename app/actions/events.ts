@@ -7,30 +7,26 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 
+import { requireEventOrganizer, PermissionError } from "@/lib/permissions";
+
 // Function to handle track, prize, and question configuration updates
 export async function updateEventConfig(eventId: string, config: {
     tracks: z.infer<typeof updateTrackSchema>[],
     prizes: z.infer<typeof updatePrizeSchema>[],
     questions: z.infer<typeof updateCustomQuestionSchema>[]
 }) {
-    const session = await getSession();
-    if (!session?.user) return { error: "Unauthorized" };
-
-    const isOrg = await prisma.eventRole.findUnique({
-        where: { eventId_userId: { eventId, userId: session.user.id } }
-    });
-    if (!isOrg || isOrg.role !== "ORGANIZER") return { error: "Forbidden: You are not an organizer of this event" };
-
-    // Validate inputs
-    const tracksParsed = z.array(updateTrackSchema).safeParse(config.tracks);
-    const prizesParsed = z.array(updatePrizeSchema).safeParse(config.prizes);
-    const qsParsed = z.array(updateCustomQuestionSchema).safeParse(config.questions);
-
-    if (!tracksParsed.success || !prizesParsed.success || !qsParsed.success) {
-        return { error: "Invalid configuration data" };
-    }
-
     try {
+        await requireEventOrganizer(eventId);
+
+        // Validate inputs
+        const tracksParsed = z.array(updateTrackSchema).safeParse(config.tracks);
+        const prizesParsed = z.array(updatePrizeSchema).safeParse(config.prizes);
+        const qsParsed = z.array(updateCustomQuestionSchema).safeParse(config.questions);
+
+        if (!tracksParsed.success || !prizesParsed.success || !qsParsed.success) {
+            return { error: "Invalid configuration data" };
+        }
+
         await prisma.$transaction(async (tx) => {
             // Check if submissions exist (to freeze structural question edits)
             const submissionsCount = await tx.project.count({ where: { eventId, status: "SUBMITTED" } });
@@ -127,6 +123,7 @@ export async function updateEventConfig(eventId: string, config: {
         revalidatePath(`/organizer/events/${eventId}`);
         return { success: true };
     } catch (e: any) {
+        if (e instanceof PermissionError) return { error: e.message };
         return { error: e.message || "Failed to update configuration" };
     }
 }

@@ -51,9 +51,9 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
 
             <EventReadinessPanel event={event} submissionsExist={submissionsExist} />
 
-            <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-8">
-                    {/* Event Details Section */}
+            <div className="columns-1 md:columns-2 gap-8">
+                {/* Event Details Section */}
+                <div className="break-inside-avoid-column mb-8">
                     <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
                         <div className="flex items-center gap-2 mb-6 border-b border-border pb-3">
                             <Info className="w-5 h-5 text-primary" />
@@ -70,30 +70,10 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                             }} 
                         />
                     </div>
-
-                    {/* Tracks Section */}
-                    <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
-                        <div className="flex items-center justify-between mb-6 border-b border-border pb-3">
-                            <div className="flex items-center gap-2">
-                                <ListChecks className="w-5 h-5 text-primary" />
-                                <h2 className="text-xl font-bold font-heading">Tracks</h2>
-                            </div>
-                            <span className="bg-muted px-2.5 py-0.5 rounded-full text-xs font-semibold text-muted-foreground">{event.tracks.length}</span>
-                        </div>
-                        <ul className="list-none space-y-3 mb-6">
-                            {event.tracks.map(t => <TrackItem key={t.id} track={t} eventId={event.id} />)}
-                        </ul>
-                        <div className="pt-2">
-                            <AddTrackForm eventId={event.id} />
-                        </div>
-                    </div>
-
-                    <JudgesSection eventId={event.id} tracks={event.tracks} />
-                    <JudgingStagesSection eventId={event.id} stages={event.judgingStages} tracks={event.tracks} />
                 </div>
 
-                <div className="space-y-8">
-                    {/* Custom Questions Section */}
+                {/* Custom Questions Section */}
+                <div className="break-inside-avoid-column mb-8">
                     <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
                         <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
                             <div className="flex items-center gap-2">
@@ -118,8 +98,29 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                             <AddQuestionForm eventId={event.id} disabled={submissionsExist} />
                         </div>
                     </div>
+                </div>
 
-                    {/* Prizes Section */}
+                {/* Tracks Section */}
+                <div className="break-inside-avoid-column mb-8">
+                    <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
+                        <div className="flex items-center justify-between mb-6 border-b border-border pb-3">
+                            <div className="flex items-center gap-2">
+                                <ListChecks className="w-5 h-5 text-primary" />
+                                <h2 className="text-xl font-bold font-heading">Tracks</h2>
+                            </div>
+                            <span className="bg-muted px-2.5 py-0.5 rounded-full text-xs font-semibold text-muted-foreground">{event.tracks.length}</span>
+                        </div>
+                        <ul className="list-none space-y-3 mb-6">
+                            {event.tracks.map(t => <TrackItem key={t.id} track={t} eventId={event.id} />)}
+                        </ul>
+                        <div className="pt-2">
+                            <AddTrackForm eventId={event.id} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Prizes Section */}
+                <div className="break-inside-avoid-column mb-8">
                     <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
                         <div className="flex items-center justify-between mb-6 border-b border-border pb-3">
                             <div className="flex items-center gap-2">
@@ -137,6 +138,14 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
                             <AddPrizeForm eventId={event.id} />
                         </div>
                     </div>
+                </div>
+
+                <div className="break-inside-avoid-column mb-8">
+                    <JudgesSection eventId={event.id} tracks={event.tracks} tracksMode={event.tracksMode} />
+                </div>
+                
+                <div className="break-inside-avoid-column mb-8">
+                    <JudgingStagesSection eventId={event.id} stages={event.judgingStages} tracks={event.tracks} />
                 </div>
             </div>
         </div>

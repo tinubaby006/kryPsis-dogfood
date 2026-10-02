@@ -40,7 +40,12 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
             stage: true,
             project: true,
             reviewDraft: true,
-            finalReview: true
+            finalReview: {
+                include: { 
+                    scores: true,
+                    rubricVersion: { include: { criteria: true } }
+                }
+            }
         },
         orderBy: { createdAt: 'desc' }
     });
@@ -138,6 +143,18 @@ export default async function JudgeHomePage({ params }: { params: Promise<{ even
                                                             </span>
                                                         )}
                                                     </div>
+                                                    
+                                                    {hasFinal && a.finalReview?.rubricVersion && (
+                                                        <div className="mt-2 text-sm font-mono text-success-text font-bold">
+                                                            Score: {(
+                                                                (a.finalReview.scores.reduce((acc, sc) => {
+                                                                    const crit = a.finalReview!.rubricVersion!.criteria.find(c => c.id === sc.criterionId);
+                                                                    if (!crit) return acc;
+                                                                    return acc + (crit.weightBasisPts / 10000) * (sc.value / crit.maxScore);
+                                                                }, 0)) * 100
+                                                            ).toFixed(2)} / 100
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 
                                                 <Link 

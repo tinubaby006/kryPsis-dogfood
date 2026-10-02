@@ -1,113 +1,125 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireJudgeAccess } from "@/lib/judging/auth";
+import { requireJudgeAssignment, PermissionError } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 
 export async function saveDraftAction(eventId: string, assignmentId: string, scores: Record<string, number>, comment: string) {
     try {
-        const authCtx = await requireJudgeAccess(eventId, assignmentId, { requireWrite: true });
-        const stage = authCtx.stage!;
+        // Optimistic check
+        const { assignment } = await requireJudgeAssignment(eventId, assignmentId, { mode: 'write' });
+        const stageId = assignment.stageId;
 
-        // Validate rubric
-        const rubricVersion = await prisma.rubricVersion.findFirst({
-            where: { stageId: stage.id },
-            include: { criteria: true },
-            orderBy: { createdAt: 'desc' }
-        });
-        if (!rubricVersion) return { error: "500 INTERNAL_SERVER_ERROR: No rubric found" };
+        // Transactionally commit
+        await prisma.$transaction(async (tx) => {
+            // 1. Lock in deterministic order: Event -> JudgingStage -> RubricAssignment
+            await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "JudgingStage" WHERE id = ${stageId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "RubricAssignment" WHERE id = ${assignmentId} FOR UPDATE`;
 
-        const expectedKeys = new Set(rubricVersion.criteria.map(c => c.id));
-        const actualKeys = Object.keys(scores);
-        if (actualKeys.length !== expectedKeys.size || !actualKeys.every(k => expectedKeys.has(k))) {
-            return { error: "422 UNPROCESSABLE: Scores do not match rubric criteria exactly" };
-        }
+            // 2. Recheck write permissions inside the lock
+            await requireJudgeAssignment(eventId, assignmentId, { mode: 'write' }, tx);
 
-        for (const crit of rubricVersion.criteria) {
-            const val = scores[crit.id];
-            if (val === undefined || val === null || !Number.isFinite(val) || !Number.isInteger(val)) {
-                return { error: `422 UNPROCESSABLE: Invalid or missing score for ${crit.title}` };
+            const rubricVersion = await tx.rubricVersion.findFirst({
+                where: { stageId },
+                include: { criteria: true },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (!rubricVersion) throw new Error("500 INTERNAL_SERVER_ERROR: No rubric found");
+
+            const expectedKeys = new Set(rubricVersion.criteria.map(c => c.id));
+            const actualKeys = Object.keys(scores);
+            if (actualKeys.length !== expectedKeys.size || !actualKeys.every(k => expectedKeys.has(k))) {
+                throw new Error("422 UNPROCESSABLE: Scores do not match rubric criteria exactly");
             }
-            if (val < 0 || val > crit.maxScore) {
-                return { error: `422 UNPROCESSABLE: Score for ${crit.title} is out of range (0-${crit.maxScore})` };
-            }
-        }
 
-        // Check if final review exists
-        const finalReview = await prisma.stageReview.findUnique({ where: { assignmentId } });
-        if (finalReview) {
-            return { error: "409 CONFLICT: Cannot save draft after final submission" };
-        }
-
-        await prisma.reviewDraft.upsert({
-            where: { assignmentId },
-            update: {
-                scores,
-                comment,
-                revision: { increment: 1 }
-            },
-            create: {
-                assignmentId,
-                judgeUserId: authCtx.userId,
-                scores,
-                comment
+            for (const crit of rubricVersion.criteria) {
+                const val = scores[crit.id];
+                if (val === undefined || val === null || !Number.isFinite(val) || !Number.isInteger(val)) {
+                    throw new Error(`422 UNPROCESSABLE: Invalid or missing score for ${crit.title}`);
+                }
+                if (val < 0 || val > crit.maxScore) {
+                    throw new Error(`422 UNPROCESSABLE: Score for ${crit.title} is out of range (0-${crit.maxScore})`);
+                }
             }
+
+            if (comment && comment.length > 5000) {
+                throw new Error("422 UNPROCESSABLE: Comment is too long (max 5000 chars)");
+            }
+
+            // Check if final review exists
+            const finalReview = await tx.stageReview.findUnique({ where: { assignmentId } });
+            if (finalReview) {
+                throw new Error("409 CONFLICT: Cannot save draft after final submission");
+            }
+
+            await tx.reviewDraft.upsert({
+                where: { assignmentId },
+                update: {
+                    scores,
+                    comment,
+                    revision: { increment: 1 }
+                },
+                create: {
+                    assignmentId,
+                    judgeUserId: assignment.judgeUserId,
+                    scores,
+                    comment
+                }
+            });
         });
 
         revalidatePath(`/events/${eventId}/judge`);
         revalidatePath(`/events/${eventId}/judge/assignments/${assignmentId}`);
         return { success: true };
     } catch (e: any) {
+        if (e instanceof PermissionError) return { error: e.message };
         return { error: e.message };
     }
 }
 
 export async function submitReviewAction(eventId: string, assignmentId: string, scores: Record<string, number>, comment: string) {
     try {
-        const authCtx = await requireJudgeAccess(eventId, assignmentId, { requireWrite: true });
-        const stage = authCtx.stage!;
+        // Optimistic check
+        const { assignment } = await requireJudgeAssignment(eventId, assignmentId, { mode: 'write' });
+        const stageId = assignment.stageId;
 
-        // Fetch rubric criteria
-        const rubricVersion = await prisma.rubricVersion.findFirst({
-            where: { stageId: stage.id },
-            include: { criteria: true },
-            orderBy: { createdAt: 'desc' }
-        });
+        return await prisma.$transaction(async (tx) => {
+            // 1. Lock in deterministic order
+            await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "JudgingStage" WHERE id = ${stageId} FOR UPDATE`;
+            await tx.$queryRaw`SELECT id FROM "RubricAssignment" WHERE id = ${assignmentId} FOR UPDATE`;
 
-        if (!rubricVersion) {
-            return { error: "500 INTERNAL_SERVER_ERROR: No rubric found for this stage" };
-        }
+            // 2. Recheck write permissions inside the lock
+            await requireJudgeAssignment(eventId, assignmentId, { mode: 'write' }, tx);
 
-        const expectedKeys = new Set(rubricVersion.criteria.map(c => c.id));
-        const actualKeys = Object.keys(scores);
-        if (actualKeys.length !== expectedKeys.size || !actualKeys.every(k => expectedKeys.has(k))) {
-            return { error: "422 UNPROCESSABLE: Scores do not match rubric criteria exactly" };
-        }
+            const rubricVersion = await tx.rubricVersion.findFirst({
+                where: { stageId },
+                include: { criteria: true },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (!rubricVersion) throw new Error("500 INTERNAL_SERVER_ERROR: No rubric found");
 
-        // Validate score keys and values
-        for (const crit of rubricVersion.criteria) {
-            const val = scores[crit.id];
-            if (val === undefined || val === null || !Number.isFinite(val) || !Number.isInteger(val)) {
-                return { error: `422 UNPROCESSABLE: Invalid or missing score for ${crit.title}` };
+            const expectedKeys = new Set(rubricVersion.criteria.map(c => c.id));
+            const actualKeys = Object.keys(scores);
+            if (actualKeys.length !== expectedKeys.size || !actualKeys.every(k => expectedKeys.has(k))) {
+                throw new Error("422 UNPROCESSABLE: Scores do not match rubric criteria exactly");
             }
-            if (val < 0 || val > crit.maxScore) {
-                return { error: `422 UNPROCESSABLE: Score for ${crit.title} is out of range (0-${crit.maxScore})` };
-            }
-        }
 
-        // Transactionally commit
-        await prisma.$transaction(async (tx) => {
-            // Recheck state and deadlines inside transaction
-            const currentStage = await tx.judgingStage.findUnique({ where: { id: stage.id } });
-            if (currentStage?.state !== "OPEN") throw new Error("403 FORBIDDEN: Stage no longer OPEN");
+            for (const crit of rubricVersion.criteria) {
+                const val = scores[crit.id];
+                if (val === undefined || val === null || !Number.isFinite(val) || !Number.isInteger(val)) {
+                    throw new Error(`422 UNPROCESSABLE: Invalid or missing score for ${crit.title}`);
+                }
+                if (val < 0 || val > crit.maxScore) {
+                    throw new Error(`422 UNPROCESSABLE: Score for ${crit.title} is out of range (0-${crit.maxScore})`);
+                }
+            }
             
-            const now = new Date();
-            if (currentStage.startsAt && now < currentStage.startsAt) throw new Error("403 FORBIDDEN: Judging period has not started yet");
-            if (currentStage.endsAt && now > currentStage.endsAt) throw new Error("403 FORBIDDEN: Judging period has ended");
-
-            const currentAsn = await tx.rubricAssignment.findUnique({ where: { id: assignmentId } });
-            if (!currentAsn || currentAsn.status === "CANCELLED") throw new Error("403 FORBIDDEN: Assignment cancelled");
+            if (comment && comment.length > 5000) {
+                throw new Error("422 UNPROCESSABLE: Comment is too long (max 5000 chars)");
+            }
 
             const existing = await tx.stageReview.findUnique({
                 where: { assignmentId },
@@ -143,6 +155,7 @@ export async function submitReviewAction(eventId: string, assignmentId: string, 
                     assignmentId,
                     rubricVersionId: rubricVersion.id,
                     comment,
+                    submittedAt: new Date(),
                     scores: {
                         create: Object.entries(scores).map(([critId, val]) => ({
                             criterionId: critId,
@@ -162,12 +175,13 @@ export async function submitReviewAction(eventId: string, assignmentId: string, 
             await tx.reviewDraft.deleteMany({
                 where: { assignmentId }
             });
-        });
 
-        revalidatePath(`/events/${eventId}/judge`);
-        revalidatePath(`/events/${eventId}/judge/assignments/${assignmentId}`);
-        return { success: true };
+            revalidatePath(`/events/${eventId}/judge`);
+            revalidatePath(`/events/${eventId}/judge/assignments/${assignmentId}`);
+            return { success: true };
+        });
     } catch (e: any) {
+        if (e instanceof PermissionError) return { error: e.message };
         return { error: e.message };
     }
 }

@@ -19,17 +19,21 @@ services:
     restart: unless-stopped
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
+    image: dogfood-app:local
+    pull_policy: build
     ports:
       - "127.0.0.1:3000:3000"
     environment:
       - DATABASE_URL=postgres://dogfood:dogfoodpassword@db:5432/dogfood_db?schema=public
       - BETTER_AUTH_SECRET=fallback_secret_for_offline_demo_only_1234567890
       - BETTER_AUTH_URL=http://127.0.0.1:3000
+      - ASSESSMENT_MODE=${ASSESSMENT_MODE:-0}
+      - DOGFOOD_CONFIG_PATH=/app/assessment/.dogfood.toml
+      - PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-debian-openssl-1.1.x
     volumes:
       - uploads:/app/uploads
+      - assessment:/app/assessment
     depends_on:
       db:
         condition: service_healthy
@@ -43,3 +47,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  assessment:

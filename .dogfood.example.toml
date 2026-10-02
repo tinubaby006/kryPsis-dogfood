@@ -1,0 +1,21 @@
+[portal]
+base_url = "http://127.0.0.1:3000"
+
+[tiers]
+claimed = ["T1", "T2"]
+pitch = "Local event-scoped judging and evidence exports."
+
+[auth]
+# Note: generated cookies/user IDs are installation-specific. 
+# Run `npm run assessment:config` to regenerate a working .dogfood.toml for your current DB.
+organizer = ""
+judge_a = ""
+judge_b = ""
+participant = ""
+
+[routes]
+gallery = "/events/evt_01/projects"
+submit = "/api/submit"
+judge_scores = "/api/judge/scores?eventId=evt_01"
+peer_scores = "/api/judge/scores?eventId=evt_01&judgeUserId=..."
+csv_export = "/organizer/events/evt_01/exports?type=historical_reviews"
