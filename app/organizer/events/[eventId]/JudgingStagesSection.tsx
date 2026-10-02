@@ -9,7 +9,7 @@ export function JudgingStagesSection({ eventId, stages, tracks }: { eventId: str
     const [isAdding, setIsAdding] = useState(false);
     
     return (
-        <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm mt-8">
+        <div className="bg-card p-6 md:p-8 rounded-xl border border-border shadow-sm">
             <div className="flex items-center justify-between mb-6 border-b border-border pb-3">
                 <div className="flex items-center gap-2">
                     <Gavel className="w-5 h-5 text-primary" />

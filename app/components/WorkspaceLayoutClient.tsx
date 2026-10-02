@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { SignOutButton } from "./SignOutButton";
 import { Menu, X, LayoutDashboard, Shield, Calendar, Users, FileText, CheckSquare, Settings, LogOut, Gavel, ChevronDown } from "lucide-react";
 
 export default function WorkspaceLayoutClient({
@@ -22,11 +23,7 @@ export default function WorkspaceLayoutClient({
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [switcherOpen, setSwitcherOpen] = useState(false);
 
-    const handleSignOut = async () => {
-        await authClient.signOut();
-        router.push("/sign-in");
-        router.refresh();
-    };
+
 
     // Determine current section Context and active event
     let currentEventId: string | null = null;
@@ -166,13 +163,7 @@ export default function WorkspaceLayoutClient({
                         <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                     </div>
                 </div>
-                <button 
-                    onClick={handleSignOut}
-                    className="mt-2 flex w-full items-center gap-3 px-4 py-2 rounded-md text-sm font-medium text-destructive-text hover:bg-destructive/10 transition-colors"
-                >
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                </button>
+                <SignOutButton className="mt-2 flex w-full items-center gap-3 px-4 py-2 rounded-md text-sm font-medium text-destructive-text hover:bg-destructive/10 transition-colors" />
             </div>
         </div>
     );

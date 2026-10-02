@@ -91,11 +91,9 @@ export function HomeClient({ events, session }: HomeClientProps) {
                                 <Link href="/dashboard" className="bg-primary text-primary-foreground px-6 py-3 rounded-md font-medium hover:bg-primary-hover transition-colors shadow-sm">
                                     Go to Workspace
                                 </Link>
-                                {session.user.canCreateEvents && (
-                                    <Link href="/organizer/events/new" className="bg-card border border-border text-foreground px-6 py-3 rounded-md font-medium hover:bg-muted transition-colors">
-                                        Create Event
-                                    </Link>
-                                )}
+                                <Link href="/organizer/events/new" className="bg-card border border-border text-foreground px-6 py-3 rounded-md font-medium hover:bg-muted transition-colors">
+                                    Propose an Event
+                                </Link>
                             </div>
                         )}
                     </div>

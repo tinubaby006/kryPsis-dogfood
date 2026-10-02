@@ -4,36 +4,45 @@ import { getSession } from "@/lib/session";
 import { randomBytes } from "crypto";
 import { hashToken } from "@/lib/auth-utils";
 
+import { requireEventOrganizer, PermissionError } from "@/lib/permissions";
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ eventId: string }> }
 ) {
-    const session = await getSession();
-    if (!session?.user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
     const { eventId } = await params;
-
-    // Check organizer
-    const organizer = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-    
-    if (!organizer && !user?.isPlatformAdmin) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    let user;
+    try {
+        user = await requireEventOrganizer(eventId);
+    } catch (e: any) {
+        if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: e.statusCode });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
-        const accesses = await prisma.eventJudgeAccess.findMany({
-            where: { eventId },
-            include: {
-                user: { select: { id: true, name: true, email: true } },
-                tracks: { include: { track: { select: { id: true, name: true } } } }
-            },
-            orderBy: { createdAt: "desc" }
-        });
+        const url = new URL(request.url);
+        const limitParam = url.searchParams.get("limit");
+        const offsetParam = url.searchParams.get("offset");
+        
+        const limit = limitParam ? parseInt(limitParam) : undefined;
+        const offset = offsetParam ? parseInt(offsetParam) : undefined;
+
+        const [total, accesses] = await Promise.all([
+            prisma.eventJudgeAccess.count({ where: { eventId } }),
+            prisma.eventJudgeAccess.findMany({
+                where: { eventId },
+                include: {
+                    user: { select: { id: true, name: true, email: true } },
+                    tracks: { include: { track: { select: { id: true, name: true } } } }
+                },
+                orderBy: [
+                    { emailNormalized: "asc" },
+                    { id: "asc" }
+                ],
+                take: limit,
+                skip: offset
+            })
+        ]);
 
         // Map correctly
         const results = accesses.map(a => ({
@@ -47,7 +56,12 @@ export async function GET(
             version: a.version
         }));
 
-        return NextResponse.json({ accesses: results });
+        return NextResponse.json({ 
+            accesses: results,
+            total,
+            limit: limit || total,
+            offset: offset || 0
+        });
     } catch (e: any) {
         return NextResponse.json({ error: e.message }, { status: 500 });
     }
@@ -57,20 +71,13 @@ export async function POST(
     request: Request,
     { params }: { params: Promise<{ eventId: string }> }
 ) {
-    const session = await getSession();
-    if (!session?.user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
     const { eventId } = await params;
-
-    const organizer = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
-    
-    if (!organizer && !adminUser?.isPlatformAdmin) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    let user;
+    try {
+        user = await requireEventOrganizer(eventId);
+    } catch (e: any) {
+        if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: e.statusCode });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
@@ -85,7 +92,9 @@ export async function POST(
         const event = await prisma.event.findUnique({ where: { id: eventId }, include: { tracks: true } });
         if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
+        let finalTrackIds: string[] = [];
         if (event.tracksMode === "SINGLE_POOL") {
+            finalTrackIds = [];
             if (Array.isArray(trackIds) && trackIds.length > 0) {
                 return NextResponse.json({ error: "SINGLE_POOL events cannot have track selections" }, { status: 422 });
             }
@@ -93,8 +102,10 @@ export async function POST(
             if (!Array.isArray(trackIds) || trackIds.length === 0) {
                 return NextResponse.json({ error: "At least one track required for MULTI_TRACK events" }, { status: 422 });
             }
+            // Deduplicate tracks
+            finalTrackIds = Array.from(new Set(trackIds));
             const validTrackIds = new Set(event.tracks.map(t => t.id));
-            if (!trackIds.every(id => validTrackIds.has(id))) {
+            if (!finalTrackIds.every(id => validTrackIds.has(id))) {
                 return NextResponse.json({ error: "Invalid track ID provided" }, { status: 422 });
             }
         }
@@ -109,7 +120,7 @@ export async function POST(
             }
 
             // Check if user exists
-            const user = await tx.user.findUnique({
+            const invitedUser = await tx.user.findUnique({
                 where: { email: emailNormalized }
             });
 
@@ -119,9 +130,9 @@ export async function POST(
             let expiresAt: Date | undefined;
             
             // Check conflicts if user exists
-            if (user) {
+            if (invitedUser) {
                 const conflict = await tx.eventRole.findFirst({
-                    where: { eventId, userId: user.id, role: { in: ["ORGANIZER", "PARTICIPANT"] } }
+                    where: { eventId, userId: invitedUser.id, role: { in: ["ORGANIZER", "PARTICIPANT"] } }
                 });
                 if (conflict) {
                     throw new Error(`409 CONFLICT: User has conflicting role: ${conflict.role}`);
@@ -138,13 +149,13 @@ export async function POST(
                 data: {
                     eventId,
                     emailNormalized,
-                    userId: user?.id,
+                    userId: invitedUser?.id,
                     status,
                     tokenHash,
                     expiresAt,
-                    invitedById: session.user.id,
+                    invitedById: user.id,
                     tracks: {
-                        create: trackIds.map((id: string) => ({ trackId: id }))
+                        create: finalTrackIds.map((id: string) => ({ trackId: id }))
                     }
                 }
             });
@@ -152,10 +163,10 @@ export async function POST(
             await tx.auditLog.create({
                 data: {
                     action: "JUDGE_ACCESS_CREATED",
-                    actorUserId: session.user.id,
+                    actorUserId: user.id,
                     entityType: "EVENT",
                     entityId: eventId,
-                    metadata: { accessId: access.id, emailNormalized, trackIds }
+                    metadata: { accessId: access.id, emailNormalized, trackIds: finalTrackIds }
                 }
             });
 

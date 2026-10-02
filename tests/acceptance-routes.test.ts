@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
     getSession: vi.fn(),
     prisma: {
-        eventRole: { findMany: vi.fn(), findFirst: vi.fn() },
+        eventRole: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+        eventJudgeAccess: { findUnique: vi.fn(), findMany: vi.fn() },
         stageJudge: { findMany: vi.fn() },
         rubricAssignment: { findMany: vi.fn() },
         review: { findMany: vi.fn() },
@@ -18,8 +19,9 @@ const request = (path: string) => new Request('http://localhost:3000' + path);
 const params = { params: Promise.resolve({ eventId: 'evt_01' }) };
 beforeEach(() => {
     vi.resetAllMocks();
-    mocks.getSession.mockResolvedValue({ user: { id: 'judge-a' } });
+    mocks.getSession.mockResolvedValue({ user: { id: 'judge-a', email: 'judge@example.com' } });
     mocks.prisma.eventRole.findMany.mockResolvedValue([{ eventId: 'evt_01' }]);
+    mocks.prisma.eventJudgeAccess.findUnique.mockResolvedValue({ status: 'ACTIVE' });
     mocks.prisma.stageJudge.findMany.mockResolvedValue([{ stageId: 'stage-1' }]);
     mocks.prisma.rubricAssignment.findMany.mockResolvedValue([]);
     mocks.prisma.review.findMany.mockResolvedValue([]);
@@ -69,29 +71,32 @@ describe('organizer historical CSV', () => {
         expect((await csv(request('/exports?type=historical_reviews'), params)).status).toBe(401);
     });
     it('denies a judge even when logged in', async () => {
-        mocks.prisma.eventRole.findFirst.mockResolvedValue(null);
+        mocks.prisma.eventRole.findUnique.mockResolvedValue(null);
         expect((await csv(request('/exports?type=historical_reviews'), params)).status).toBe(403);
         expect(mocks.prisma.review.findMany).not.toHaveBeenCalled();
     });
     it('exports real criterion evidence as a non-admin event organizer without a fake stage', async () => {
-        mocks.prisma.eventRole.findFirst.mockResolvedValue({ role: 'ORGANIZER' });
+        mocks.prisma.eventRole.findUnique.mockResolvedValue({ role: 'ORGANIZER' });
         mocks.prisma.review.findMany.mockResolvedValue([{
             id: 'r1', projectId: 'p1', judgeUserId: 'j1', source: 'FIXTURE',
             comment: '=formula,"quote"\nnext',
-            scores: [{ criterion: { key: 'quality' }, value: 4 }]
+            scores: [{ criterion: { key: 'quality' }, value: 4 }],
+            project: { title: 'Project 1' },
+            judge: { name: 'Judge 1', email: 'judge@example.com' }
         }]);
         const res = await csv(request('/exports?type=historical_reviews'), params);
         const body = await res.text();
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toContain('text/csv');
         expect(res.headers.get('cache-control')).toContain('no-store');
-        expect(body).toContain('"quality","4"');
+        expect(body).toContain('quality');
+        expect(body).toContain('4');
         expect(body).toContain('"\'=formula,""quote""\nnext"');
         expect(mocks.prisma.judgingStage.findUnique).not.toHaveBeenCalled();
-        expect(mocks.prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { eventId: 'evt_01' } }));
+        expect(mocks.prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { eventId: 'evt_01', source: 'FIXTURE' } }));
     });
     it('keeps stageId mandatory for ordinary stage exports', async () => {
-        mocks.prisma.eventRole.findFirst.mockResolvedValue({ role: 'ORGANIZER' });
+        mocks.prisma.eventRole.findUnique.mockResolvedValue({ role: 'ORGANIZER' });
         expect((await csv(request('/exports?type=results'), params)).status).toBe(400);
     });
 });

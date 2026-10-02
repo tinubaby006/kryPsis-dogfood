@@ -46,7 +46,7 @@ export default function AdminOrganizerRequestsPage() {
         }
     };
 
-    const handleDecision = async (decision: "APPROVE" | "REJECT") => {
+    const handleDecision = async (decision: "APPROVE" | "REJECT", extraData: any = {}) => {
         if (!selectedReq) return;
         if (decision === "REJECT" && !reason) {
             alert("A reason is required to reject.");
@@ -61,7 +61,8 @@ export default function AdminOrganizerRequestsPage() {
                 body: JSON.stringify({
                     decision,
                     reason,
-                    expectedVersion: selectedReq.version
+                    expectedVersion: selectedReq.version,
+                    ...extraData
                 })
             });
             const data = await res.json();
@@ -105,6 +106,14 @@ export default function AdminOrganizerRequestsPage() {
                 <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2 border border-border rounded-md hover:bg-muted flex items-center gap-2">
                     <ArrowLeft className="w-4 h-4" /> Back to Admin
                 </Link>
+            </div>
+
+            <div className="bg-warning/10 border border-warning/20 p-4 mb-6 rounded-md">
+                <h2 className="font-bold text-warning mb-1">Legacy System Deprecated</h2>
+                <p className="text-sm font-medium text-warning/90">
+                    The global Organizer privilege grant system is deprecated in favor of explicit Event Proposals. 
+                    Legacy pending requests remain visible here. To approve one, you must convert it into an Event Proposal by supplying the required fields.
+                </p>
             </div>
 
             {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive-text p-4 mb-6 rounded-md font-medium text-sm">{error}</div>}
@@ -228,30 +237,73 @@ export default function AdminOrganizerRequestsPage() {
 
                             {selectedReq.status === "PENDING" && (
                                 <div className="border-t border-border pt-6 mt-6">
-                                    <label className="block text-sm font-semibold mb-2 text-foreground">Decision Reason (Required for Rejection)</label>
-                                    <textarea 
-                                        className="w-full bg-background border border-border text-foreground rounded-md p-3 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" 
-                                        rows={3} 
-                                        placeholder="Add a reason or note..."
-                                        value={reason}
-                                        onChange={e => setReason(e.target.value)}
-                                    />
-                                    <div className="flex gap-3">
-                                        <button 
-                                            disabled={actionLoading}
-                                            onClick={() => handleDecision("REJECT")}
-                                            className="flex-1 bg-background border border-destructive/50 text-destructive-text py-2.5 rounded-md font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <XCircle className="w-4 h-4" /> Reject
-                                        </button>
-                                        <button 
-                                            disabled={actionLoading}
-                                            onClick={() => handleDecision("APPROVE")}
-                                            className="flex-1 bg-success text-success-foreground py-2.5 rounded-md font-medium hover:bg-success/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                                        >
-                                            <CheckCircle className="w-4 h-4" /> Approve
-                                        </button>
-                                    </div>
+                                    <h3 className="text-sm font-bold text-foreground mb-4">Convert to Event Proposal (Required)</h3>
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const fd = new FormData(e.currentTarget);
+                                        const convertData = {
+                                            proposedSlug: fd.get("slug") as string,
+                                            timeZone: fd.get("timeZone") as string,
+                                            submissionsCloseAt: fd.get("submissionsCloseAt") as string,
+                                            maxTeamSize: parseInt(fd.get("maxTeamSize") as string || "4"),
+                                            tracksMode: fd.get("tracksMode") as string
+                                        };
+                                        handleDecision("APPROVE", convertData);
+                                    }} className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-foreground">Slug</label>
+                                            <input required pattern="^[a-z0-9-]+$" type="text" name="slug" className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary" placeholder="e.g. hack-2026" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-foreground">Submissions Close At (Local Time)</label>
+                                            <input required type="datetime-local" name="submissionsCloseAt" className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-foreground">Timezone (IANA)</label>
+                                            <input required type="text" name="timeZone" defaultValue="UTC" className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-xs font-semibold mb-1 text-foreground">Max Team Size</label>
+                                                <input required type="number" name="maxTeamSize" min="1" max="20" defaultValue="4" className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold mb-1 text-foreground">Tracks Mode</label>
+                                                <select name="tracksMode" defaultValue="SINGLE_POOL" className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary">
+                                                    <option value="SINGLE_POOL">Single Pool</option>
+                                                    <option value="MULTI_TRACK">Multi Track</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-foreground">Decision Reason / Notes</label>
+                                            <textarea 
+                                                className="w-full bg-background border border-border text-foreground rounded-md p-2 text-xs focus:ring-1 focus:ring-primary" 
+                                                rows={2} 
+                                                placeholder="Add a reason or note..."
+                                                value={reason}
+                                                onChange={e => setReason(e.target.value)}
+                                            />
+                                        </div>
+                                        
+                                        <div className="flex gap-3 pt-2">
+                                            <button 
+                                                type="button"
+                                                disabled={actionLoading}
+                                                onClick={() => handleDecision("REJECT")}
+                                                className="flex-1 bg-background border border-destructive/50 text-destructive-text py-2 rounded-md font-medium text-xs hover:bg-destructive/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                            >
+                                                <XCircle className="w-3 h-3" /> Reject
+                                            </button>
+                                            <button 
+                                                type="submit"
+                                                disabled={actionLoading}
+                                                className="flex-1 bg-success text-success-foreground py-2 rounded-md font-medium text-xs hover:bg-success/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1 shadow-sm"
+                                            >
+                                                <CheckCircle className="w-3 h-3" /> Convert & Approve
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             )}
                         </div>

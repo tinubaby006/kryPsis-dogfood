@@ -129,6 +129,17 @@ model AssessmentCredential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+enum TracksMode {
+  SINGLE_POOL
+  MULTI_TRACK
+}
+
+enum AssignmentStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
 enum Visibility {
   DRAFT
   PUBLIC
@@ -144,7 +155,7 @@ model Event {
   submissionsOpenAt  DateTime?  @db.Timestamptz
   submissionsCloseAt DateTime   @db.Timestamptz
   timeZone           String     @default("UTC")
-  tracksMode         String     @default("SINGLE_POOL")
+  tracksMode         TracksMode @default(SINGLE_POOL)
   visibility         Visibility @default(DRAFT)
   maxTeamSize        Int        @default(4)
   createdById        String
@@ -430,6 +441,9 @@ model FixtureImport {
   rawPayload   Json
   issues       ImportIssue[]
 
+  stages       JudgingStage[] @relation("FixtureImportStages")
+  reviews      StageReview[]  @relation("FixtureImportReviews")
+
   @@unique([sourceName, sourceSha256])
 }
 
@@ -490,7 +504,7 @@ model EventProposal {
   proposedSlug       String
   description        String              @default("")
   timeZone           String              @default("UTC")
-  tracksMode         String              @default("SINGLE_POOL")
+  tracksMode         TracksMode          @default(SINGLE_POOL)
   startsAt           DateTime?           @db.Timestamptz
   endsAt             DateTime?           @db.Timestamptz
   submissionsOpenAt  DateTime?           @db.Timestamptz
@@ -591,6 +605,11 @@ model JudgingStage {
   algorithmVer    String?
   configHash      String?
   outputPolicy    Json?
+  origin          RecordSource @default(LIVE)
+  fixtureImportId String?      @unique
+  archivedAt      DateTime?    @db.Timestamptz
+  activeRubricVersionId String?
+  publishedSnapshotId   String?
   startsAt        DateTime?  @db.Timestamptz
   endsAt          DateTime?  @db.Timestamptz
   createdAt       DateTime   @default(now()) @db.Timestamptz
@@ -598,9 +617,12 @@ model JudgingStage {
 
   event Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
   track Track? @relation(fields: [trackId, eventId], references: [id, eventId], onDelete: Restrict)
+  fixtureImport FixtureImport? @relation("FixtureImportStages", fields: [fixtureImportId], references: [id], onDelete: SetNull)
+  activeRubric  RubricVersion? @relation("ActiveRubric", fields: [activeRubricVersionId], references: [id])
+  publishedSnapshot FinalizationSnapshot? @relation("PublishedSnapshot", fields: [publishedSnapshotId], references: [id])
 
   assignments     RubricAssignment[]
-  rubrics         RubricVersion[]
+  rubrics         RubricVersion[] @relation("StageRubrics")
   projects        StageProject[]
   judges          StageJudge[]
   assignmentRuns  AssignmentRun[]
@@ -617,6 +639,7 @@ model StageProject {
   projectId       String
   eventId         String
   versionSnapshot Int
+  projectSnapshot Json?
   eligibility     String?
   createdAt       DateTime @default(now()) @db.Timestamptz
 
@@ -647,7 +670,8 @@ model RubricVersion {
   versionHash String
   createdAt   DateTime @default(now()) @db.Timestamptz
 
-  stage    JudgingStage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage    JudgingStage      @relation("StageRubrics", fields: [stageId], references: [id], onDelete: Cascade)
+  activeInStages JudgingStage[] @relation("ActiveRubric")
   criteria RubricCriterion[]
   reviews  StageReview[]
 }
@@ -693,7 +717,7 @@ model RubricAssignment {
   projectId   String
   judgeUserId String
   runId       String
-  status      String   @default("PENDING")
+  status      AssignmentStatus @default(PENDING)
   createdAt   DateTime @default(now()) @db.Timestamptz
 
   stage   JudgingStage  @relation(fields: [stageId], references: [id], onDelete: Cascade)
@@ -725,11 +749,18 @@ model StageReview {
   assignmentId    String   @unique
   rubricVersionId String
   comment         String?
-  submittedAt     DateTime @default(now()) @db.Timestamptz
+  origin          RecordSource @default(LIVE)
+  fixtureImportId String?
+  sourceRecordKey String?
+  importedAt      DateTime? @db.Timestamptz
+  submittedAt     DateTime? @db.Timestamptz
 
   assignment    RubricAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   rubricVersion RubricVersion         @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  fixtureImport FixtureImport?        @relation("FixtureImportReviews", fields: [fixtureImportId], references: [id], onDelete: SetNull)
   scores        StageCriterionScore[]
+
+  @@unique([fixtureImportId, sourceRecordKey])
 }
 
 model StageCriterionScore {
@@ -744,16 +775,18 @@ model StageCriterionScore {
 }
 
 model CalculationRun {
-  id          String    @id @default(cuid())
-  stageId     String
-  method      String
-  configHash  String
-  inputHash   String
-  implVersion String
-  status      String    @default("PENDING")
-  diagnostics Json?
-  startedAt   DateTime  @default(now()) @db.Timestamptz
-  finishedAt  DateTime? @db.Timestamptz
+  id                 String    @id @default(cuid())
+  stageId            String
+  method             String
+  configHash         String
+  inputHash          String
+  implVersion        String
+  status             String    @default("PENDING")
+  diagnostics        Json?
+  startedAt          DateTime  @default(now()) @db.Timestamptz
+  finishedAt         DateTime? @db.Timestamptz
+  invalidatedAt      DateTime? @db.Timestamptz
+  invalidationReason String?
 
   stage          JudgingStage           @relation(fields: [stageId], references: [id], onDelete: Cascade)
   projectResults ProjectResult[]
@@ -797,7 +830,7 @@ model ProjectResult {
 
 model FinalizationSnapshot {
   id               String   @id @default(cuid())
-  stageId          String
+  stageId          String   @unique
   calculationRunId String
   canonicalHash    String
   finalizedById    String
@@ -805,6 +838,7 @@ model FinalizationSnapshot {
   finalizedAt      DateTime @default(now()) @db.Timestamptz
 
   stage          JudgingStage   @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  publishedStages JudgingStage[] @relation("PublishedSnapshot")
   calculationRun CalculationRun @relation(fields: [calculationRunId], references: [id], onDelete: Restrict)
   finalizedBy    User           @relation(fields: [finalizedById], references: [id], onDelete: Restrict)
 }

@@ -12,7 +12,7 @@ async function main() {
     const user = await prisma.user.findUnique({ where: { email: 'member1_1@example.org' } });
     if (user) {
         const orgRole = await prisma.eventRole.findUnique({
-            where: { eventId_userId_role: { eventId: 'evt_01', userId: user.id, role: 'ORGANIZER' } }
+            where: { eventId_userId: { eventId: 'evt_01', userId: user.id } }
         });
         console.log('Is member1_1@example.org an organizer for evt_01?', !!orgRole);
     }

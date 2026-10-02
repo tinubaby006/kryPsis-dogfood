@@ -2,7 +2,11 @@ import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL || "postgresql://dogfood:dogfood_local_dev@localhost:5432/dogfood?schema=public" });
+if (!process.env.DATABASE_URL) {
+    throw new Error("FATAL: DATABASE_URL environment variable is required.");
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

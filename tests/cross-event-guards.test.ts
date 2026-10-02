@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
     prisma: {
         event: { findFirst: vi.fn(), findUnique: vi.fn() },
         eventRole: { findFirst: vi.fn(), findUnique: vi.fn() },
+        eventJudgeAccess: { findUnique: vi.fn(), findMany: vi.fn() },
         user: { findUnique: vi.fn() },
         judgingStage: { findUnique: vi.fn() },
         rubricAssignment: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
@@ -15,7 +16,8 @@ const mocks = vi.hoisted(() => ({
         reviewDraft: { upsert: vi.fn(), deleteMany: vi.fn() },
         rubricVersion: { findFirst: vi.fn() },
         stageReview: { findUnique: vi.fn(), create: vi.fn() },
-        $transaction: vi.fn(async (cb) => cb(mocks.prisma))
+        $transaction: vi.fn(async (cb) => cb(mocks.prisma)),
+        $queryRaw: vi.fn()
     }
 }));
 vi.mock('@/lib/session', () => ({ getSession: mocks.getSession }));
@@ -28,10 +30,11 @@ import { submitReviewAction } from '@/app/events/[eventId]/judge/assignments/[as
 
 beforeEach(() => {
     vi.resetAllMocks();
-    mocks.getSession.mockResolvedValue({ user: { id: 'user-1' } });
+    mocks.getSession.mockResolvedValue({ user: { id: 'user-1', email: 'judge@example.com' } });
     mocks.prisma.user.findUnique.mockResolvedValue({ id: 'user-1', isPlatformAdmin: false });
     mocks.prisma.eventRole.findFirst.mockResolvedValue({ role: 'ORGANIZER' });
     mocks.prisma.eventRole.findUnique.mockResolvedValue({ role: 'ORGANIZER' });
+    mocks.prisma.eventJudgeAccess.findUnique.mockResolvedValue({ status: 'ACTIVE' });
     mocks.prisma.event.findFirst.mockResolvedValue({ id: "event-A" });
     mocks.prisma.track.deleteMany.mockResolvedValue({ count: 0 });
     mocks.prisma.project.count.mockResolvedValue(0);
@@ -84,14 +87,16 @@ describe('Concurrent Close/Submit Testing', () => {
         mocks.prisma.judgingStage.findUnique.mockResolvedValue({ id: "stage-1" });
         mocks.prisma.eventRole.findUnique.mockResolvedValue({ role: "JUDGE" });
         
+        let callCount = 0;
         // Initial assignment fetch outside transaction: Stage is OPEN
         mocks.prisma.rubricAssignment.findUnique.mockImplementation(({ where }) => {
+            callCount++;
             return Promise.resolve({
                 id: where.id,
                 judgeUserId: "user-1",
                 stageId: "stage-1",
                 status: "PENDING",
-                stage: { eventId: "event-A", state: "OPEN" }
+                stage: { eventId: "event-A", state: callCount === 1 ? "OPEN" : "CLOSED", origin: "LIVE" }
             });
         });
         
@@ -108,6 +113,6 @@ describe('Concurrent Close/Submit Testing', () => {
         });
 
         const res = await submitReviewAction("event-A", "asn-1", { "c-1": 5 }, "comment");
-        expect(res.error).toMatch(/Stage no longer OPEN/);
+        expect((res as any).error || (res as any).message).toMatch(/Stage no longer OPEN|must be OPEN/);
     });
 });

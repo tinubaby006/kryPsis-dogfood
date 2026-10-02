@@ -1,15 +1,9 @@
-2026-10-02 20:12:32.019 IST [22460] LOG:  starting PostgreSQL 15.4, compiled by Visual C++ build 1914, 64-bit
-2026-10-02 20:12:32.029 IST [22460] LOG:  listening on IPv6 address "::1", port 5432
-2026-10-02 20:12:32.030 IST [22460] LOG:  listening on IPv4 address "127.0.0.1", port 5432
-2026-10-02 20:12:32.119 IST [6704] LOG:  database system was shut down at 2026-10-02 20:12:26 IST
-2026-10-02 20:12:32.157 IST [22460] LOG:  database system is ready to accept connections
-2026-10-02 20:13:20.425 IST [1788] LOG:  starting PostgreSQL 15.4, compiled by Visual C++ build 1914, 64-bit
-2026-10-02 20:13:20.430 IST [1788] LOG:  listening on IPv6 address "::1", port 5432
-2026-10-02 20:13:20.431 IST [1788] LOG:  listening on IPv4 address "127.0.0.1", port 5432
-2026-10-02 20:13:20.491 IST [12536] LOG:  database system was interrupted; last known up at 2026-10-02 20:12:32 IST
-2026-10-02 20:13:20.655 IST [12536] LOG:  database system was not properly shut down; automatic recovery in progress
-2026-10-02 20:13:20.657 IST [12536] LOG:  invalid record length at 0/14FD298: wanted 24, got 0
-2026-10-02 20:13:20.657 IST [12536] LOG:  redo is not required
-2026-10-02 20:13:20.664 IST [19548] LOG:  checkpoint starting: end-of-recovery immediate wait
-2026-10-02 20:13:20.675 IST [19548] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.003 s, total=0.017 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=0 kB
-2026-10-02 20:13:20.713 IST [1788] LOG:  database system is ready to accept connections
+
+> dogfoodhack@0.1.0 start
+> next start -H 127.0.0.1
+
+▲ Next.js 16.3.6
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+✓ Ready in 560ms
+✓ Running next.config.ts took 89ms

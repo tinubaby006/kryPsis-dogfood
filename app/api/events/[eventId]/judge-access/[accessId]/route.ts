@@ -1,31 +1,44 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireEventOrganizer, PermissionError } from "@/lib/permissions";
 import { getSession } from "@/lib/session";
 
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ eventId: string, accessId: string }> }
 ) {
-    const session = await getSession();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
     const { eventId, accessId } = await params;
-
-    const organizer = await prisma.eventRole.findFirst({
-        where: { eventId, userId: session.user.id, role: "ORGANIZER" }
-    });
-    const adminUser = await prisma.user.findUnique({ where: { id: session.user.id } });
     
-    if (!organizer && !adminUser?.isPlatformAdmin) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    let user;
+    try {
+        user = await requireEventOrganizer(eventId);
+    } catch (e: any) {
+        if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: e.statusCode });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
         const body = await request.json();
         const { trackIds, expectedVersion } = body;
 
-        if (!Array.isArray(trackIds) || trackIds.length === 0) {
-            return NextResponse.json({ error: "At least one track required" }, { status: 422 });
+        const event = await prisma.event.findUnique({ where: { id: eventId }, include: { tracks: true } });
+        if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+        let finalTrackIds: string[] = [];
+        if (event.tracksMode === "SINGLE_POOL") {
+            finalTrackIds = [];
+            if (Array.isArray(trackIds) && trackIds.length > 0) {
+                return NextResponse.json({ error: "SINGLE_POOL events cannot have track selections" }, { status: 422 });
+            }
+        } else {
+            if (!Array.isArray(trackIds) || trackIds.length === 0) {
+                return NextResponse.json({ error: "At least one track required for MULTI_TRACK events" }, { status: 422 });
+            }
+            finalTrackIds = Array.from(new Set(trackIds));
+            const validTrackIds = new Set(event.tracks.map(t => t.id));
+            if (!finalTrackIds.every(id => validTrackIds.has(id))) {
+                return NextResponse.json({ error: "Invalid track ID provided" }, { status: 422 });
+            }
         }
         if (typeof expectedVersion !== "number") {
             return NextResponse.json({ error: "expectedVersion required" }, { status: 422 });
@@ -42,7 +55,7 @@ export async function PATCH(
             // Update scope
             await tx.eventJudgeAccessTrack.deleteMany({ where: { accessId } });
             await tx.eventJudgeAccessTrack.createMany({
-                data: trackIds.map((id: string) => ({ accessId, eventId, trackId: id }))
+                data: finalTrackIds.map((id: string) => ({ accessId, eventId, trackId: id }))
             });
 
             const updated = await tx.eventJudgeAccess.update({
@@ -54,17 +67,17 @@ export async function PATCH(
             if (access.status === "ACTIVE" && access.userId) {
                 await tx.judgeTrack.deleteMany({ where: { eventId, userId: access.userId } });
                 await tx.judgeTrack.createMany({
-                    data: trackIds.map((id: string) => ({ eventId, userId: access.userId!, trackId: id }))
+                    data: finalTrackIds.map((id: string) => ({ eventId, userId: access.userId!, trackId: id }))
                 });
             }
 
             await tx.auditLog.create({
                 data: {
                     action: "JUDGE_ACCESS_UPDATED",
-                    actorUserId: session.user.id,
+                    actorUserId: user.id,
                     entityType: "EVENT",
                     entityId: eventId,
-                    metadata: { accessId, trackIds }
+                    metadata: { accessId, trackIds: finalTrackIds }
                 }
             });
 

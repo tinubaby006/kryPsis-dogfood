@@ -42,3 +42,5 @@ next-env.d.ts
 
 /app/generated/prisma
 pgsql/  
+/release/
+*.tar

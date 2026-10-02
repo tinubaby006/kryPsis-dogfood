@@ -38,17 +38,41 @@ export function ReviewForm({ eventId, assignmentId, rubric, draft, finalReview }
         setSuccess("");
         const res = await submitReviewAction(eventId, assignmentId, scores, comment);
         setSubmitting(false);
-        if (res.error) setError(res.error);
+        const response = res as any;
+        if (!response.success) setError(response.error || response.message || "Error");
         else setSuccess("Review submitted successfully!");
     };
 
     if (isSubmitted) {
+        let rawScoreTotal = 0;
+        const finalScores = finalReview.scores.reduce((acc: any, s: any) => ({ ...acc, [s.criterionId]: s.value }), {});
+        
+        for (const c of rubric.criteria) {
+            const val = finalScores[c.id] || 0;
+            rawScoreTotal += (c.weightBasisPts / 10000) * (val / c.maxScore);
+        }
+        rawScoreTotal = rawScoreTotal * 100;
+
         return (
             <div className="bg-success/10 border border-success/20 rounded-xl p-6">
-                <h3 className="text-success font-bold flex items-center gap-2 mb-4">
-                    <CheckCircle className="w-5 h-5" />
-                    Review Submitted
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-success font-bold flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5" />
+                        Review Submitted
+                        {finalReview.submittedAt ? (
+                            <span className="text-xs font-normal text-success/80 ml-2">
+                                on {new Date(finalReview.submittedAt).toLocaleDateString()}
+                            </span>
+                        ) : (
+                            <span className="text-xs font-normal text-success/80 ml-2">
+                                (Unknown historical time)
+                            </span>
+                        )}
+                    </h3>
+                    <div className="bg-success/20 px-4 py-2 rounded-lg border border-success/30 font-mono font-bold text-success-text">
+                        Total: {rawScoreTotal.toFixed(2)} / 100
+                    </div>
+                </div>
                 <div className="space-y-4">
                     {rubric.criteria.map((c: any) => (
                         <div key={c.id} className="flex justify-between items-center bg-card p-3 rounded shadow-sm border border-border">
@@ -56,14 +80,14 @@ export function ReviewForm({ eventId, assignmentId, rubric, draft, finalReview }
                                 <div className="font-bold text-foreground">{c.title}</div>
                             </div>
                             <div className="font-mono font-bold text-lg text-foreground">
-                                {scores[c.id]} <span className="text-muted-foreground text-sm">/ {c.maxScore}</span>
+                                {finalScores[c.id]} <span className="text-muted-foreground text-sm">/ {c.maxScore}</span>
                             </div>
                         </div>
                     ))}
-                    {comment && (
+                    {finalReview.comment && (
                         <div className="bg-card p-4 rounded shadow-sm border border-border mt-4">
                             <h4 className="font-bold text-sm mb-2 text-foreground">Comments</h4>
-                            <p className="text-foreground whitespace-pre-wrap">{comment}</p>
+                            <p className="text-foreground whitespace-pre-wrap">{finalReview.comment}</p>
                         </div>
                     )}
                 </div>

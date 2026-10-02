@@ -14,8 +14,7 @@ export default async function PublicResults({ params }: { params: Promise<{ even
     if (!stage) notFound();
 
     // Secure checking: the payload must be published.
-    const isPublished = (stage.outputPolicy as any)?.isPublished === true;
-    if (stage.state !== "FINALIZED" || !isPublished) {
+    if (!stage.publishedSnapshotId) {
         return (
             <div className="max-w-4xl mx-auto p-4 sm:p-8 text-center pt-20">
                 <ShieldCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -28,14 +27,18 @@ export default async function PublicResults({ params }: { params: Promise<{ even
         );
     }
 
-    const run = await prisma.calculationRun.findFirst({
-        where: { stageId },
-        orderBy: { finishedAt: 'desc' },
-        include: { projectResults: { include: { project: true } } }
+    const snapshot = await prisma.finalizationSnapshot.findUnique({
+        where: { id: stage.publishedSnapshotId },
+        include: { 
+            calculationRun: { 
+                include: { projectResults: { include: { project: true } } } 
+            } 
+        }
     });
 
-    if (!run) notFound();
+    if (!snapshot || !snapshot.calculationRun) notFound();
 
+    const run = snapshot.calculationRun;
     const results = run.projectResults.sort((a,b) => (a.rank||0) - (b.rank||0));
 
     return (
@@ -99,7 +102,7 @@ export default async function PublicResults({ params }: { params: Promise<{ even
                     </table>
                 </div>
             </div>
-            {run.method === "WLS" && (
+            {run.method === "PAIR_OVERLAP_WLS" && (
                 <div className="mt-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
                     Officially Verified & Calibrated Results

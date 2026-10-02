@@ -61,7 +61,8 @@ export async function reviewProposal(proposalId: string, revision: number, actio
                     visibility: "DRAFT",
                     maxTeamSize: proposal.maxTeamSize,
                     createdById: proposal.applicantUserId,
-                    timeZone: proposal.timeZone
+                    timeZone: proposal.timeZone,
+                    tracksMode: proposal.tracksMode
                 }
             });
 

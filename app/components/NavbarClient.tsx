@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { SignOutButton } from "./SignOutButton";
 
 export default function NavbarClient({ 
     user, 
@@ -40,11 +41,7 @@ export default function NavbarClient({
         showOrganizerLink = true;
     }
 
-    const handleSignOut = async () => {
-        await authClient.signOut();
-        router.push("/sign-in");
-        router.refresh();
-    };
+
 
     return (
         <header className="bg-background border-b border-border">
@@ -64,7 +61,7 @@ export default function NavbarClient({
                             <div className="hidden md:flex items-center space-x-4">
                                 {displayRole && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded font-bold uppercase">{displayRole}</span>}
                                 <Link href="/dashboard" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Dashboard</Link>
-                                <button onClick={handleSignOut} className="text-sm text-destructive-text hover:text-destructive transition-colors font-medium">Sign Out</button>
+                                <SignOutButton className="text-sm text-destructive-text hover:text-destructive transition-colors font-medium" icon={false}>Sign Out</SignOutButton>
                             </div>
                         ) : (
                             <Link href="/sign-in" className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary-hover transition-colors">Sign In</Link>
@@ -94,7 +91,7 @@ export default function NavbarClient({
                                     {user.email}
                                 </div>
                                 <Link href="/dashboard" className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md">Dashboard</Link>
-                                <button onClick={handleSignOut} className="block w-full text-left px-3 py-2 text-base font-medium text-destructive-text hover:bg-muted rounded-md">Sign Out</button>
+                                <SignOutButton className="block w-full text-left px-3 py-2 text-base font-medium text-destructive-text hover:bg-muted rounded-md" icon={false}>Sign Out</SignOutButton>
                             </>
                         ) : (
                             <Link href="/sign-in" className="block px-3 py-2 text-base font-medium text-primary hover:bg-muted rounded-md">Sign In</Link>
