@@ -4,7 +4,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
-export async function reviewProposal(proposalId: string, action: "APPROVE" | "REJECT", reason?: string) {
+export async function reviewProposal(proposalId: string, revision: number, action: "APPROVE" | "REJECT", reason?: string) {
     const session = await getSession();
     if (!session?.user) return { error: "Unauthorized" };
 
@@ -15,16 +15,34 @@ export async function reviewProposal(proposalId: string, action: "APPROVE" | "RE
         const result = await prisma.$transaction(async (tx) => {
             const proposal = await tx.eventProposal.findUnique({ where: { id: proposalId } });
             if (!proposal) throw new Error("Proposal not found");
+            
+            // Retry returns same event
+            if (action === "APPROVE" && proposal.status === "APPROVED" && proposal.approvedEventId) {
+                return { success: true, eventId: proposal.approvedEventId };
+            }
+
             if (proposal.status !== "SUBMITTED") throw new Error("Proposal is not in a submitted state");
+            if (proposal.revision !== revision) throw new Error("Proposal was modified by another request. Please refresh.");
 
             if (action === "REJECT") {
                 await tx.eventProposal.update({
-                    where: { id: proposalId },
+                    where: { id: proposalId, revision: revision },
                     data: {
                         status: "REJECTED",
                         decisionReason: reason,
                         reviewedById: session.user.id,
-                        reviewedAt: new Date()
+                        reviewedAt: new Date(),
+                        revision: { increment: 1 }
+                    }
+                });
+                
+                await tx.auditLog.create({
+                    data: {
+                        actorUserId: session.user.id,
+                        action: "PROPOSAL_REJECTED",
+                        entityType: "EventProposal",
+                        entityId: proposalId,
+                        metadata: { reason: reason || "" }
                     }
                 });
                 return { success: true };
@@ -56,13 +74,24 @@ export async function reviewProposal(proposalId: string, action: "APPROVE" | "RE
             });
 
             await tx.eventProposal.update({
-                where: { id: proposalId },
+                where: { id: proposalId, revision: revision },
                 data: {
                     status: "APPROVED",
                     decisionReason: reason,
                     reviewedById: session.user.id,
                     reviewedAt: new Date(),
-                    approvedEventId: ev.id
+                    approvedEventId: ev.id,
+                    revision: { increment: 1 }
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    actorUserId: session.user.id,
+                    action: "PROPOSAL_APPROVED",
+                    entityType: "EventProposal",
+                    entityId: proposalId,
+                    metadata: { eventId: ev.id, reason: reason || "" }
                 }
             });
 
@@ -72,6 +101,7 @@ export async function reviewProposal(proposalId: string, action: "APPROVE" | "RE
         revalidatePath("/admin/proposals");
         return result;
     } catch (e: any) {
+        if (e.code === 'P2025') return { error: "Proposal was modified by another request. Please refresh." };
         return { error: e.message || "Failed to review proposal" };
     }
 }
