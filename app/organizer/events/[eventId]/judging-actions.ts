@@ -235,9 +235,19 @@ export async function finalizeCalculation(eventId: string, stageId: string, calc
             include: { projectResults: true }
         });
         if (!run) return { error: "Calculation run not found" };
+        if (run.status !== "SUCCESS") return { error: "Cannot finalize an unsuccessful calculation run." };
 
-        // "Incomplete stages cannot silently finalize."
-        // We could check if all assignments are completed.
+        const { generateCalculationPreview } = await import('@/lib/judging/calculation');
+        const preview = await generateCalculationPreview(stageId);
+        
+        if (preview.inputHash !== run.inputHash || preview.configHash !== run.configHash) {
+            return { error: "Stale finalization: Evidence or configuration has changed since this calculation run. Please recalculate." };
+        }
+        
+        if (preview.status !== "SUCCESS") {
+            return { error: `Cannot finalize: Current state is unsupported (${preview.status}).` };
+        }
+
         const pending = await prisma.rubricAssignment.count({
             where: { stageId, status: "PENDING" }
         });
@@ -255,7 +265,16 @@ export async function finalizeCalculation(eventId: string, stageId: string, calc
                     calculationRunId: run.id,
                     canonicalHash,
                     finalizedById: userId,
-                    snapshotData: { runId: run.id, resultsCount: run.projectResults.length }
+                    snapshotData: { 
+                        runId: run.id, 
+                        resultsCount: run.projectResults.length,
+                        evidence: {
+                            inputHash: preview.inputHash,
+                            configHash: preview.configHash,
+                            projectsCount: preview.diagnostics.projectsCount,
+                            judgesCount: preview.diagnostics.judgesCount
+                        }
+                    }
                 }
             });
 

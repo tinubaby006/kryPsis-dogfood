@@ -16,5 +16,5 @@ The data model for Dogfood is built using Prisma ORM.
     - `JudgingStage` & `StageProject`: Represents isolated judging rounds with frozen populations.
     - `StageJudge` & `RubricAssignment`: Explicit judge allocation with tracking (`ReviewDraft`, `StageReview`).
     - `RubricVersion` & `RubricCriterion`: Immutable rubrics tied to a stage.
-    - `CalculationRun` & `ProjectResult`: Computation snapshots mapping raw scores to WLS rankings.
-    - `FinalizationSnapshot` & `AuditEvent`: Audit logs and cryptographically hashed final results.
+    - `CalculationRun` & `ProjectResult`: Computation snapshots mapping raw scores to WLS rankings. Support multiple algorithms (e.g. `v1_wls` and `v2_weighted_constrained_wls`).
+    - `FinalizationSnapshot` & `AuditEvent`: Audit logs and cryptographically hashed final results. `FinalizationSnapshot` is the strict canonical source of truth for published outputs, ensuring data cannot be altered by a stale calculation race condition.

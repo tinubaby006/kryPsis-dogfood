@@ -1,7 +1,15 @@
 import { prisma } from "@/lib/db";
 import * as crypto from "crypto";
 
-export function calculateWLS(reviews: { projectId: string, judgeId: string, rawScore: number }[], judges: string[], projects: string[]) {
+export function calculateWeightedWLS(reviews: { projectId: string, judgeId: string, rawScore: number }[], judges: string[], projects: string[], stageProjects: { projectId: string }[], R: number) {
+    // 1. Strict Evidence Completeness Check
+    for (const sp of stageProjects) {
+        const m = reviews.filter(r => r.projectId === sp.projectId).length;
+        if (m < R) {
+            return { status: "INCOMPLETE_EVIDENCE", reason: `Project ${sp.projectId} has ${m} reviews, requires ${R}. Missing review is never zero.`, isConnected: false, results: [], calibrations: [] };
+        }
+    }
+
     let isConnected = true;
     const adj = new Map<string, Set<string>>();
     for (const j of judges) adj.set(j, new Set());
@@ -33,61 +41,70 @@ export function calculateWLS(reviews: { projectId: string, judgeId: string, rawS
         isConnected = visited.size === judges.length;
     }
 
-    let status = isConnected ? "CALIBRATED" : "DISCONNECTED_FALLBACK";
-    
-    // Initialize Biases and Means
-    const b = new Map<string, number>();
-    for (const j of judges) b.set(j, 0);
+    // "Disconnected multi-judge calibration returns unsupported, not a publishable raw-mean fallback."
+    if (!isConnected && judges.length > 1) {
+        return { status: "UNSUPPORTED", reason: "Disconnected multi-judge panel.", isConnected: false, results: [], calibrations: [] };
+    }
 
-    const mu = new Map<string, number>();
+    // Weighted WLS Setup
+    const A = new Map<string, Map<string, number>>();
+    const v = new Map<string, number>();
+    const b = new Map<string, number>();
+    for (const j of judges) {
+        A.set(j, new Map());
+        v.set(j, 0);
+        b.set(j, 0);
+    }
+
     const rawMu = new Map<string, number>();
-    
-    // Baseline raw means
     for (const p of projects) {
         const pRevs = reviews.filter(r => r.projectId === p);
-        const mean = pRevs.length > 0 ? pRevs.reduce((sum, r) => sum + r.rawScore, 0) / pRevs.length : 0;
+        const m = pRevs.length;
+        if (m === 0) continue;
+        const mean = pRevs.reduce((sum, r) => sum + r.rawScore, 0) / m;
         rawMu.set(p, mean);
-        mu.set(p, mean);
+        
+        for (const r1 of pRevs) {
+            v.set(r1.judgeId, v.get(r1.judgeId)! + (r1.rawScore - mean));
+            
+            const a_jj = A.get(r1.judgeId)!.get(r1.judgeId) || 0;
+            A.get(r1.judgeId)!.set(r1.judgeId, a_jj + (1 - 1/m));
+            
+            for (const r2 of pRevs) {
+                if (r1.judgeId !== r2.judgeId) {
+                    const a_jk = A.get(r1.judgeId)!.get(r2.judgeId) || 0;
+                    A.get(r1.judgeId)!.set(r2.judgeId, a_jk - 1/m);
+                }
+            }
+        }
     }
 
     if (isConnected && judges.length > 1) {
-        // Alternating minimization
-        const MAX_ITER = 100;
-        const EPSILON = 1e-6;
+        const MAX_ITER = 1000;
+        const EPSILON = 1e-7;
         for (let iter = 0; iter < MAX_ITER; iter++) {
             let maxChange = 0;
-
-            // Update mu
-            for (const p of projects) {
-                const pRevs = reviews.filter(r => r.projectId === p);
-                if (pRevs.length === 0) continue;
-                const newMu = pRevs.reduce((sum, r) => sum + (r.rawScore - b.get(r.judgeId)!), 0) / pRevs.length;
-                mu.set(p, newMu);
-            }
-
-            // Update b
             let sumB = 0;
-            const newB = new Map<string, number>();
             for (const j of judges) {
-                const jRevs = reviews.filter(r => r.judgeId === j);
-                if (jRevs.length === 0) {
-                    newB.set(j, 0);
-                    continue;
+                let sumAkBk = 0;
+                for (const [k, a_jk] of A.get(j)!.entries()) {
+                    if (k !== j) {
+                        sumAkBk += a_jk * b.get(k)!;
+                    }
                 }
-                const bj = jRevs.reduce((sum, r) => sum + (r.rawScore - mu.get(r.projectId)!), 0) / jRevs.length;
-                newB.set(j, bj);
-                sumB += bj;
+                const a_jj = A.get(j)!.get(j) || 0;
+                if (a_jj > 0) {
+                    const newBj = (v.get(j)! - sumAkBk) / a_jj;
+                    const change = Math.abs(newBj - b.get(j)!);
+                    if (change > maxChange) maxChange = change;
+                    b.set(j, newBj);
+                }
+                sumB += b.get(j)!;
             }
-
-            // Center biases
             const meanB = sumB / judges.length;
             for (const j of judges) {
-                const centered = newB.get(j)! - meanB;
-                const change = Math.abs(centered - b.get(j)!);
-                if (change > maxChange) maxChange = change;
-                b.set(j, centered);
+                b.set(j, b.get(j)! - meanB);
             }
-
             if (maxChange < EPSILON) break;
         }
     }
@@ -97,19 +114,16 @@ export function calculateWLS(reviews: { projectId: string, judgeId: string, rawS
     for (const p of projects) {
         const pRevs = reviews.filter(r => r.projectId === p);
         const m = pRevs.length;
+        if (m === 0) continue;
+        
         const rm = rawMu.get(p)!;
-        let nm = mu.get(p)!;
+        const unclampedNm = pRevs.reduce((sum, r) => sum + (r.rawScore - b.get(r.judgeId)!), 0) / m;
         
-        // "score clamping only after aggregation"
-        if (nm > 100) nm = 100;
-        if (nm < 0) nm = 0;
-        
-        // SD on calibrated scores
         let sd = null;
         if (m > 1) {
             const variance = pRevs.reduce((sum, r) => {
                 const calibratedScore = r.rawScore - b.get(r.judgeId)!;
-                return sum + Math.pow(calibratedScore - nm, 2);
+                return sum + Math.pow(calibratedScore - unclampedNm, 2);
             }, 0) / (m - 1);
             sd = Math.sqrt(variance);
         }
@@ -118,22 +132,27 @@ export function calculateWLS(reviews: { projectId: string, judgeId: string, rawS
             projectId: p,
             reviewCount: m,
             rawMean: rm,
-            normalizedMean: nm,
+            normalizedMean: unclampedNm, 
+            displayedMean: Math.max(0, Math.min(100, unclampedNm)),
             sd
         });
     }
 
-    // Sort for ranking (descending normalizedMean, tie-break rawMean, tie-break projectId)
+    // Versioned deterministic ties
     results.sort((x, y) => {
         if (Math.abs(x.normalizedMean - y.normalizedMean) > 1e-9) return y.normalizedMean - x.normalizedMean;
         if (Math.abs(x.rawMean - y.rawMean) > 1e-9) return y.rawMean - x.rawMean;
-        return x.projectId.localeCompare(y.projectId);
+        
+        const hx = crypto.createHash("sha256").update(x.projectId + "tie").digest("hex");
+        const hy = crypto.createHash("sha256").update(y.projectId + "tie").digest("hex");
+        return hx.localeCompare(hy);
     });
 
     let currentRank = 1;
     for (let i = 0; i < results.length; i++) {
         (results[i] as any).rank = currentRank++;
-        (results[i] as any).displayedMean = parseFloat(results[i].normalizedMean.toFixed(2));
+        (results[i] as any).displayedMean = parseFloat(results[i].displayedMean.toFixed(2));
+        (results[i] as any).tieKey = crypto.createHash("sha256").update(results[i].projectId + "tie").digest("hex");
     }
 
     const calibrations = judges.map(j => ({
@@ -142,7 +161,7 @@ export function calculateWLS(reviews: { projectId: string, judgeId: string, rawS
         reviewCount: reviews.filter(r => r.judgeId === j).length
     }));
 
-    return { status, isConnected, results, calibrations };
+    return { status: "SUCCESS", isConnected, results, calibrations };
 }
 
 export async function generateCalculationPreview(stageId: string) {
@@ -163,6 +182,11 @@ export async function generateCalculationPreview(stageId: string) {
     const assignments = await prisma.rubricAssignment.findMany({
         where: { stageId, status: "COMPLETED" },
         include: { finalReview: { include: { scores: true } } }
+    });
+
+    const stageProjects = await prisma.stageProject.findMany({
+        where: { stageId },
+        select: { projectId: true }
     });
 
     // Compute Raw Scores
@@ -188,10 +212,14 @@ export async function generateCalculationPreview(stageId: string) {
     const projects = Array.from(new Set(reviews.map(r => r.projectId)));
     const judges = Array.from(new Set(reviews.map(r => r.judgeId)));
     
-    const calc = calculateWLS(reviews, judges, projects);
+    const calc = calculateWeightedWLS(reviews, judges, projects, stageProjects, stage.requiredReviews);
 
     // Input Hash
-    const inputHashStr = JSON.stringify(reviews.sort((a,b) => a.projectId.localeCompare(b.projectId) || a.judgeId.localeCompare(b.judgeId)));
+    // Canonical JSON stringification for hashing evidence
+    const inputHashStr = JSON.stringify({
+        reviews: reviews.sort((a,b) => a.projectId.localeCompare(b.projectId) || a.judgeId.localeCompare(b.judgeId)),
+        stageProjects: stageProjects.map(sp => sp.projectId).sort()
+    });
     const inputHash = crypto.createHash("sha256").update(inputHashStr).digest("hex");
     const configHash = crypto.createHash("sha256").update(rubric.id).digest("hex");
 
@@ -232,6 +260,10 @@ export async function commitCalculationRun(stageId: string, inputHash: string, c
             return { success: true, runId: existingRun.id, message: "Idempotent return" };
         }
 
+        if (preview.status !== "SUCCESS") {
+            throw new Error(`Cannot commit: ${preview.status} (${(preview as any).reason || ''})`);
+        }
+
         const runId = `calc_${crypto.randomBytes(8).toString('hex')}`;
         
         const run = await tx.calculationRun.create({
@@ -241,7 +273,7 @@ export async function commitCalculationRun(stageId: string, inputHash: string, c
                 configHash,
                 inputHash,
                 method: preview.status,
-                implVersion: "v1_wls",
+                implVersion: "v2_weighted_constrained_wls",
                 status: "SUCCESS",
                 finishedAt: new Date(),
                 diagnostics: preview.diagnostics
@@ -259,7 +291,7 @@ export async function commitCalculationRun(stageId: string, inputHash: string, c
                 displayedMean: (r as any).displayedMean,
                 sd: r.sd,
                 rank: (r as any).rank,
-                tieKey: null
+                tieKey: (r as any).tieKey
             }))
         });
 
